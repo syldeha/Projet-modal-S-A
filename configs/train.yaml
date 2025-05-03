@@ -1,0 +1,33 @@
+defaults:
+    - _self_
+    - dataset: default
+    - optim: adamw
+    - model: dinov2_advanced
+    - loss_fn: msle
+
+epochs: 10
+log: True
+prefix: ""
+experiment_name: ${prefix}${model.name}_${now:%Y-%m-%d_%H-%M-%S}
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .
+
+datamodule:
+  _target_: data.datamodule.DataModule
+  dataset_path: ${data_dir}
+  train_transform: ${dataset.train_transform}
+  test_transform: ${dataset.val_transform}
+  batch_size: ${dataset.batch_size}
+  num_workers: ${dataset.num_workers}
+  metadata: ${dataset.metadata}
+
+data_dir: ${root_dir}/dataset/
+root_dir:  ${hydra:runtime.cwd}
+checkpoint_path: ${root_dir}/checkpoints/${experiment_name}_last.pt
+checkpoint_to_load: ${root_dir}/checkpoints/dinov2_advanced_2025-05-03_04-30-36_last.pt
+
+
+

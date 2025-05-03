@@ -1,0 +1,4 @@
+instance: 
+  _target_: models.dinov2_advanced.DinoV2Finetune_advanced
+  frozen: True
+name: dinov2_advanced

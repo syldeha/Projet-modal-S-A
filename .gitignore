@@ -6,6 +6,7 @@ checkpoints/*.pt
 *.ipynb_checkpoints
 utils/check_solution.py
 CSC_43M04_EP_challenge.zip
+miniconda.sh
 # -- end custom
 
 *.log

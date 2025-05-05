@@ -15,6 +15,8 @@ def create_submission(cfg):
             "test",
             transforms=hydra.utils.instantiate(cfg.datamodule.test_transform),
             metadata=cfg.datamodule.metadata,
+            split_ratio=1,
+            train_or_val_or_test="test"
         ),
         batch_size=cfg.datamodule.batch_size,
         shuffle=False,
@@ -40,7 +42,7 @@ def create_submission(cfg):
                 pd.DataFrame({"ID": batch["id"], "views": preds}),
             ]
         )
-    submission.to_csv(f"{cfg.root_dir}/submission.csv", index=False)
+    submission.to_csv(f"{cfg.root_dir}/submission_7.csv", index=False)
 
 
 if __name__ == "__main__":

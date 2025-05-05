@@ -3,6 +3,7 @@ import torch
 from data.dataset import Dataset
 
 
+
 class DataModule:
     def __init__(
         self,
@@ -20,27 +21,19 @@ class DataModule:
         self.num_workers = num_workers
         self.metadata = metadata
         #on va séprarer les données en train et val
-        self.train_set = Dataset(
+
+    def train_dataloader(self):
+        """Train dataloader."""
+        train_set = Dataset(
             self.dataset_path,
             "train_val",
             transforms=self.train_transform,
             metadata=self.metadata,
+            split_ratio=0.7,
+            train_or_val_or_test="train"
         )
-        self.n_train = int(0.8 * len(self.train_set))
-        self.n_val = len(self.train_set) - self.n_train
-        self.train_set, self.val_set = torch.utils.data.random_split(self.train_set, [self.n_train, self.n_val], generator=torch.Generator().manual_seed(42))
-
-
-    def train_dataloader(self):
-        """Train dataloader."""
-        # train_set = Dataset(
-        #     self.dataset_path,
-        #     "train_val",
-        #     transforms=self.train_transform,
-        #     metadata=self.metadata,
-        # )
         return DataLoader(
-            self.train_set,
+            train_set,
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
@@ -50,8 +43,15 @@ class DataModule:
         """TODO: 
         Implement a strategy to create a validation set from the train set.
         """
+        val_set = Dataset(
+            self.dataset_path,
+            "train_val",
+            transforms=self.train_transform,
+            metadata=self.metadata,
+            split_ratio=0.7,
+            train_or_val_or_test="val")
         return DataLoader(
-            self.val_set,
+            val_set,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
@@ -64,6 +64,8 @@ class DataModule:
             "test",
             transforms=self.test_transform,
             metadata=self.metadata,
+            split_ratio=1,
+            train_or_val_or_test="test"
         )
         return DataLoader(
             dataset,

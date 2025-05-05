@@ -35,7 +35,7 @@ def train(cfg):
     logger_std.info(f"\n Pourcentage de paramètres entraînables: {100 * trainable_params / total_params:.2f}%")
     
     try:
-        model.load_checkpoint(cfg.checkpoint_to_load)
+        model.load_checkpoint(cfg.checkpoint_to_load, load_full=True)
         logger_std.info(f"Checkpoint loaded from {cfg.checkpoint_to_load}")
     except Exception as e:
         logger_std.info(f"Error loading checkpoint: {e}")

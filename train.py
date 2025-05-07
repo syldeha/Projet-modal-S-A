@@ -4,7 +4,7 @@ import hydra
 from tqdm import tqdm
 import logging
 import os
-
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from utils.sanity import show_images
     # Calculer et afficher le nombre de paramètres du modèle
 def count_parameters(model):
@@ -40,6 +40,14 @@ def train(cfg):
     except Exception as e:
         logger_std.info(f"Error loading checkpoint: {e}")
     optimizer = hydra.utils.instantiate(cfg.optim, params=model.parameters())
+    scheduler=ReduceLROnPlateau(
+        optimizer, 
+        mode='min', 
+        factor=0.1, 
+        patience=2, 
+        # verbose=True,
+        min_lr=1e-6
+    )
     loss_fn = hydra.utils.instantiate(cfg.loss_fn)
     datamodule = hydra.utils.instantiate(cfg.datamodule)
     train_loader = datamodule.train_dataloader()
@@ -56,6 +64,20 @@ def train(cfg):
             {"sanity_checks/val_images": wandb.Image(val_sanity)}
         ) if logger is not None else None
 
+    # Variable to track the best validation loss
+    best_val_loss = float('inf')
+    
+    # S'assurer que le chemin du checkpoint se termine par .pt
+    checkpoint_path = cfg.checkpoint_path
+    if not checkpoint_path.endswith('.pt'):
+        checkpoint_path += '.pt'
+    
+    # Path for best model
+    best_model_path = checkpoint_path.replace('.pt', '_best.pt')
+    
+    # Créer le répertoire pour les checkpoints s'il n'existe pas
+    os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+
     # -- loop over epochs
     for epoch in tqdm(range(cfg.epochs), desc="Epochs"):
         # -- loop over training batches
@@ -67,7 +89,14 @@ def train(cfg):
             batch["image"] = batch["image"].to(device)
             batch["target"] = batch["target"].to(device).squeeze()
             preds = model(batch).squeeze()
-            loss = loss_fn(preds, batch["target"])
+            
+            # Calculate loss with regularization
+            if hasattr(model, 'get_l2_regularization_loss'):
+                reg_loss = model.get_l2_regularization_loss()
+                loss = loss_fn(preds, batch["target"]) + reg_loss
+            else:
+                loss = loss_fn(preds, batch["target"])
+                
             (
                 logger.log({"loss": loss.detach().cpu().numpy()})
                 if logger is not None
@@ -104,12 +133,31 @@ def train(cfg):
                 batch["target"] = batch["target"].to(device).squeeze()
                 with torch.no_grad():
                     preds = model(batch).squeeze()
-                loss = loss_fn(preds, batch["target"])
+                    
+                # Calculate loss with regularization for consistent reporting
+                if hasattr(model, 'get_l2_regularization_loss'):
+                    reg_loss = model.get_l2_regularization_loss().detach()
+                    loss = loss_fn(preds, batch["target"]) + reg_loss
+                else:
+                    loss = loss_fn(preds, batch["target"])
+                    
                 epoch_val_loss += loss.detach().cpu().numpy() * len(batch["image"])
                 num_samples_val += len(batch["image"])
             epoch_val_loss /= num_samples_val
+            scheduler.step(epoch_val_loss)
             val_metrics["val/loss_epoch"] = epoch_val_loss
             logger_std.info(f"----------------Epoch {epoch} val loss: {epoch_val_loss:.4f}----------------")
+            
+            # Save model if validation loss improved
+            if epoch_val_loss < best_val_loss:
+                best_val_loss = epoch_val_loss
+                logger_std.info(f"New best validation loss: {best_val_loss:.4f}. Saving model to {best_model_path}")
+                torch.save(model.state_dict(), best_model_path)
+                
+                # Log to wandb if enabled
+                if logger is not None:
+                    logger.log({"best_val_loss": best_val_loss})
+            
             (
                 logger.log(
                     {
@@ -126,23 +174,19 @@ def train(cfg):
         Training metrics:
         - Train Loss: {epoch_train_loss:.4f},
         Validation metrics: 
-        - Val Loss: {epoch_val_loss:.4f}"""
+        - Val Loss: {epoch_val_loss:.4f},
+        Best validation loss: {best_val_loss:.4f}"""
     )
 
     if cfg.log:
         logger.finish()
-
-    # S'assurer que le chemin du checkpoint se termine par .pt
-    checkpoint_path = cfg.checkpoint_path
-    if not checkpoint_path.endswith('.pt'):
-        checkpoint_path += '.pt'
     
-    # Créer le répertoire pour les checkpoints s'il n'existe pas
-    os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+    # Save final model
+    logger_std.info(f"Saving final model checkpoint to {checkpoint_path}")
+    torch.save(model.state_dict(), checkpoint_path)
     
-    logger_std.info(f"Saving model checkpoint to {checkpoint_path}")
-    torch.save(model.state_dict(), checkpoint_path) #important: quand on va utiliser torch.load(path, map_location=device) ça va retourner uniquement le state_dict
-    # si on enregistrait sous forme de dictionnaire ca devait retourner le meme dictionnaire avec les meme clé de sauvegarde.
+    # Inform about the best model
+    logger_std.info(f"Best model saved to {best_model_path} with validation loss: {best_val_loss:.4f}")
 
 
 if __name__ == "__main__":

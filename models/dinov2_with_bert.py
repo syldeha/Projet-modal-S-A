@@ -3,8 +3,8 @@ import torch.nn as nn
 import os
 from transformers import AutoModel, AutoTokenizer
 
-class DinoV2WithEmbed(nn.Module):
-    def __init__(self, frozen=False):
+class DinoV2WithBert(nn.Module):
+    def __init__(self, frozen=False , pretrained_model="Syldehayem/bert_tiny_embedder_train_best", tokenizer_model_path="prajjwal1/bert-tiny"):
         super().__init__()
         # Vision backbone
         self.backbone = torch.hub.load("facebookresearch/dinov2", "dinov2_vitb14_reg")
@@ -15,12 +15,14 @@ class DinoV2WithEmbed(nn.Module):
                 param.requires_grad = False
 
         # Text backbone (Transformer)
-        self.tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L12-v2")
-        self.text_encoder = AutoModel.from_pretrained("sentence-transformers/all-MiniLM-L12-v2")
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_path)
+        self.text_encoder = AutoModel.from_pretrained(pretrained_model)
         self.text_dim = self.text_encoder.config.hidden_size
+        if frozen:
+            for param in self.text_encoder.parameters():
+                param.requires_grad = False
 
-
-        # Fusion
+        # Fusion coefficients
         self.vis_coef = 0.75
         self.txt_coef = 0.25
 
@@ -35,7 +37,7 @@ class DinoV2WithEmbed(nn.Module):
         else:
             self.txt_proj = nn.Identity()
 
-        # Tête finale (identique à la tienne)
+        # Tête de régression finale (ou classification selon tes besoins)
         self.regression_head = nn.Sequential(
             nn.Linear(fusion_dim, 256),
             nn.GELU(),
@@ -48,10 +50,6 @@ class DinoV2WithEmbed(nn.Module):
             nn.Linear(32, 1),
             nn.ReLU(),
         )
-    def mean_pooling(self, model_output, attention_mask):
-        token_embeddings = model_output[0]
-        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-        return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
     def forward(self, x):
         # x["image"]: image tensor (B,C,H,W), x["title"]: list[str]
@@ -61,10 +59,9 @@ class DinoV2WithEmbed(nn.Module):
         v_feat = self.vis_proj(v_feat)    # [batch, fusion_dim]
 
         # 2. Encode text
-        encoded = self.tokenizer(x["description"], padding=True, truncation=True, return_tensors='pt').to(v_feat.device)
-        with torch.no_grad():
-            out = self.text_encoder(**encoded)
-        t_feat = self.mean_pooling(out, encoded["attention_mask"])
+        encoded = self.tokenizer(x["title"], padding=True, truncation=True, return_tensors='pt').to(v_feat.device)
+        out = self.text_encoder(**encoded)
+        t_feat = out.last_hidden_state[:, 0]
         t_feat = self.txt_proj(t_feat)       # [batch, fusion_dim]
 
         # 3. Fusion (addition pondérée)

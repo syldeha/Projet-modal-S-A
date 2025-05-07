@@ -1,0 +1,5 @@
+instance: 
+  _target_: models.dinov2_with_bert.DinoV2WithBert
+  frozen: True
+
+name: dinov2_with_bert

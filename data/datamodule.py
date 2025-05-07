@@ -20,38 +20,28 @@ class DataModule:
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.metadata = metadata
-        #on va séprarer les données en train et val
+        
+        # Create train and val datasets in a single operation using the factory method
+        self.train, self.val = Dataset.create_train_val_datasets(
+            self.dataset_path,
+            self.train_transform,
+            self.metadata,
+            split_ratio=0.9
+        )
 
     def train_dataloader(self):
         """Train dataloader."""
-        train_set = Dataset(
-            self.dataset_path,
-            "train_val",
-            transforms=self.train_transform,
-            metadata=self.metadata,
-            split_ratio=0.7,
-            train_or_val_or_test="train"
-        )
         return DataLoader(
-            train_set,
+            self.train,
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
         )
 
     def val_dataloader(self):
-        """TODO: 
-        Implement a strategy to create a validation set from the train set.
-        """
-        val_set = Dataset(
-            self.dataset_path,
-            "train_val",
-            transforms=self.train_transform,
-            metadata=self.metadata,
-            split_ratio=0.7,
-            train_or_val_or_test="val")
+        """Validation dataloader."""
         return DataLoader(
-            val_set,
+            self.val,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,

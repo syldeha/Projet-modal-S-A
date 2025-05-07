@@ -42,7 +42,7 @@ def create_submission(cfg):
                 pd.DataFrame({"ID": batch["id"], "views": preds}),
             ]
         )
-    submission.to_csv(f"{cfg.root_dir}/submission_7.csv", index=False)
+    submission.to_csv(f"{cfg.root_dir}/submission_bert_tiny.csv", index=False)
 
 
 if __name__ == "__main__":

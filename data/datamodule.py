@@ -2,6 +2,19 @@ from torch.utils.data import DataLoader
 import torch
 from data.dataset import Dataset
 
+# def collate_fn_downsample(batch):
+#     SOLID_PERFORMERS_LABEL_IDX = 
+#     keep = []
+#     for item in batch:
+#         if item['labels'] == SOLID_PERFORMERS_LABEL_IDX:
+#             if random.random() < 0.5:
+#                 keep.append(item)
+#         else:
+#             keep.append(item)
+#     if not keep:
+#         # Assure au moins 1 exemple
+#         keep.append(random.choice(batch))
+#     return {k: [d[k] for d in keep] for k in keep[0]}  # format batch standard
 
 
 class DataModule:

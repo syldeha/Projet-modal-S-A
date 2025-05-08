@@ -6,13 +6,72 @@ from sklearn.model_selection import train_test_split
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger_std = logging.getLogger(__name__)
+import re
 
+def clean_description(description):
+
+    """
+    description : str
+    => Renvoie un texte structuré et propre décrivant la vidéo
+    """
+    import re
+    # Supprimer liens, emails, hashtags, mentions
+    description = re.sub(r'https?:\/\/\S+|www\.\S+', '', description)
+    description = re.sub(r'\S+@\S+', '', description)
+    description = re.sub(r'#\w+', '', description)
+    description = re.sub(r'@[A-Za-z0-9_]+', '', description)
+    description = re.sub(r'[^\w\s,.!?\'":;()-]', '', description)
+    
+    # Liste augmentée des triggers d'appel à l'action (cta)
+    calls_to_action = [
+        "like", "subscribe", "sub", "share", "bell", "notification",
+        "comment", "don't forget", "hit the", "click the", "smash the",
+        "support", "checkout our merch", "thank you", "follow us", "stay tuned",
+        "keep in the loop", "be kept in the loop", "published on our channel",
+        "ring the bell", "please hit", "please consider", "button", "buy",
+        "purchase", "get featured", "join us", "as new material is published",
+        "as new content is published"
+    ]
+    
+    lines = description.split('\n')
+    cleaned_lines = []
+    for line in lines:
+        line_stripped = line.strip().lower()
+        if any(cta in line_stripped for cta in calls_to_action):
+            continue
+        if line_stripped.startswith("►") or line_stripped.startswith("▪") or line_stripped.startswith("—"):
+            continue
+        if len(line_stripped) < 5:
+            continue
+        cleaned_lines.append(line.strip())
+    
+    description = ' '.join(cleaned_lines)
+    description = re.sub(r'\s+', ' ', description).strip()
+    return description
+
+def make_prompt(entry):
+    """
+    entry : dict ou pd.Series avec les clés 'title', 'channel', 'date', 'description'
+    => Renvoie un texte structuré et propre décrivant la vidéo
+    """
+    title = entry['title']
+    channel = entry['channel_real_name']
+    date = entry['year']  # Garde juste l'année/mois/jour si besoin
+    desc_clean = clean_description(entry['description'])
+    return (
+        f"La vidéo \"{title}\" publiée par la chaîne {channel} en {date} parle de : {desc_clean}"
+        if desc_clean else
+        f"La vidéo \"{title}\" publiée par la chaîne {channel} en {date}."
+    )
 def process_youtube_csv(csv_path):
     """
     Fonction qui permet de modifier le fichier csv pour ajouter des colonnes , (view_classes, channel_real_name)
     """
     # Chargement du fichier CSV
     df = pd.read_csv(csv_path)
+    for col in ["title", "channel", "description", "year"]:
+        if col in df.columns:
+            df[col] = df[col].fillna("").astype(str)
     
     # ------ 1. Ajout de la colonne 'view_classes' ------
     view_thresholds = [
@@ -36,16 +95,30 @@ def process_youtube_csv(csv_path):
                 return labels[i]
         return labels[-1]
     df['view_classes'] = df['views'].apply(assign_view_class)
-    
+
+
     # ------ 2. Ajout de la colonne 'channel_real_name' ------
     if 'channel' in df.columns:
         unique_channels = df['channel'].unique()
         channel_mapping = {channel: f"channel{i+1}" for i, channel in enumerate(unique_channels)}
         df['channel_real_name'] = df['channel'].map(channel_mapping)
-    
+    df['prompt_resume'] = df.apply(make_prompt, axis=1) #ajout de la colonne prompt_resume qui contient les informations liées à la publication de la vidéo
     # Retourner le DataFrame modifié
     return df
+def process_youtube_csv_test(df):
+    """
+    Fonction qui permet de modifier le fichier csv pour ajouter la colonne 'prompt_resume'
+    """
+    for col in ["title", "channel", "description", "year"]:
+        if col in df.columns:
+            df[col] = df[col].fillna("").astype(str)
+    if 'channel' in df.columns:
+        unique_channels = df['channel'].unique()
+        channel_mapping = {channel: f"channel{i+1}" for i, channel in enumerate(unique_channels)}
+        df['channel_real_name'] = df['channel'].map(channel_mapping)
+    df['prompt_resume'] = df.apply(make_prompt, axis=1)
 
+    return df
 def feature_percentage_dict(df, feature_name):
     """
     Retourne un dictionnaire {classe: pourcentage} pour une colonne du DataFrame.
@@ -106,6 +179,8 @@ class Dataset(torch.utils.data.Dataset):
             info = process_youtube_csv(f"{dataset_path}/{split}.csv")
         elif split == "test":
             info = pd.read_csv(f"{dataset_path}/{split}.csv")  #lire le fichier csv qui est dans dataset/train_val.csv
+            info = process_youtube_csv_test(info)
+
         if train_or_val_or_test in ["train", "val"] and split != "test":
             train_set, val_set = split_function(info, split_ratio)
             if train_or_val_or_test == "train":
@@ -114,8 +189,9 @@ class Dataset(torch.utils.data.Dataset):
                 info = val_set
             # For test set, we use the entire dataset
 
-        info["description"] = info["description"].fillna("") #recuperation de la description
-        info["title"] = info["title"].fillna("")
+        info["description"] = info["description"].fillna("").astype(str) #recuperation de la description
+        info["title"] = info["title"].fillna("").astype(str)
+        info["channel_real_name"] = info["channel_real_name"].fillna("").astype(str)
         info["meta"] = info[metadata].agg(" + ".join, axis=1) #concatenation des metadata
         if "views" in info.columns:
             self.targets = info["views"].values
@@ -131,6 +207,7 @@ class Dataset(torch.utils.data.Dataset):
         self.text = info["meta"].values
         self.description = info["description"].values
         self.title = info["title"].values
+        self.prompt_resume = info["prompt_resume"].values
 
     @classmethod
     def create_train_val_datasets(cls, dataset_path, transforms, metadata, split_ratio=0.9):
@@ -205,7 +282,8 @@ class Dataset(torch.utils.data.Dataset):
                 "description": self.description[idx],
                 "title": self.title[idx],
                 "labels": self.labels[idx],
-                "label_str": self.idx2class[self.labels[idx].item()]
+                "label_str": self.idx2class[self.labels[idx].item()],
+                "prompt_resume": self.prompt_resume[idx]
             }
         else:
             value = {
@@ -214,6 +292,7 @@ class Dataset(torch.utils.data.Dataset):
                 "text": self.text[idx],
                 "description": self.description[idx],
                 "title": self.title[idx],
+                "prompt_resume": self.prompt_resume[idx]
             }
         
         # - don't have the target for test

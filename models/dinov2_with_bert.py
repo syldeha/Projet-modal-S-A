@@ -67,7 +67,7 @@ class DinoV2WithBert(nn.Module):
         # 2. Encode text
         # Assurez-vous que le tokenizer est sur le même device que l'image
         device = v_feat.device
-        encoded = self.tokenizer(x["title"], padding=True, truncation=True, return_tensors='pt')
+        encoded = self.tokenizer(x["prompt_resume"], padding=True, truncation=True, return_tensors='pt')
         # Déplacer les tenseurs vers le bon device
         encoded = {k: v.to(device) for k, v in encoded.items()}
         out = self.text_encoder(**encoded)

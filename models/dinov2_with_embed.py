@@ -48,10 +48,10 @@ class DinoV2WithEmbed(nn.Module):
             nn.Linear(32, 1),
             nn.ReLU(),
         )
-    def mean_pooling(self, model_output, attention_mask):
-        token_embeddings = model_output[0]
-        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-        return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+    # def mean_pooling(self, model_output, attention_mask):
+    #     token_embeddings = model_output[0]
+    #     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    #     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
     def forward(self, x):
         # x["image"]: image tensor (B,C,H,W), x["title"]: list[str]
@@ -64,8 +64,8 @@ class DinoV2WithEmbed(nn.Module):
         encoded = self.tokenizer(x["description"], padding=True, truncation=True, return_tensors='pt').to(v_feat.device)
         with torch.no_grad():
             out = self.text_encoder(**encoded)
-        t_feat = self.mean_pooling(out, encoded["attention_mask"])
-        t_feat = self.txt_proj(t_feat)       # [batch, fusion_dim]
+        # t_feat = self.mean_pooling(out, encoded["attention_mask"])
+        t_feat = self.txt_proj(out)       # [batch, fusion_dim]
 
         # 3. Fusion (addition pondérée)
         z = self.vis_coef * v_feat + self.txt_coef * t_feat

@@ -2,6 +2,9 @@ import hydra
 from torch.utils.data import DataLoader
 import pandas as pd
 import torch
+import numpy as np
+from collections import Counter
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 from data.dataset import Dataset
 
@@ -42,8 +45,27 @@ def create_submission(cfg):
                 pd.DataFrame({"ID": batch["id"], "views": preds}),
             ]
         )
+    
+    # Save the submission file
     submission.to_csv(f"{cfg.root_dir}/submission_bert_tiny.csv", index=False)
-
+    
+    # Analyze prediction distribution by class
+    view_thresholds = [0, 1000, 10000, 100000, 1000000, float('inf')]
+    labels = ["Hidden Gems", "Rising Stars", "Solid Performers", "Viral Hits", "Mega Blockbusters"]
+    
+    def assign_view_class(views):
+        for i in range(len(view_thresholds) - 1):
+            if view_thresholds[i] <= views < view_thresholds[i+1]:
+                return labels[i]
+        return labels[-1]
+    
+    submission['view_class'] = submission['views'].apply(assign_view_class)
+    class_distribution = submission['view_class'].value_counts()
+    
+    print("\nClass distribution of predictions:")
+    for class_name, count in class_distribution.items():
+        percentage = (count / len(submission)) * 100
+        print(f"{class_name}: {count} videos ({percentage:.2f}%)")
 
 if __name__ == "__main__":
     create_submission()

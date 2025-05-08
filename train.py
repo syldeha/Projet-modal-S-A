@@ -4,20 +4,114 @@ import hydra
 from tqdm import tqdm
 import logging
 import os
+import pandas as pd
+import numpy as np
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from utils.sanity import show_images
-    # Calculer et afficher le nombre de paramètres du modèle
+from models.embedder import train_bert_tiny,MyLLM
+from transformers import AutoTokenizer
+
+
+
+# Calculer et afficher le nombre de paramètres du modèle
 def count_parameters(model):
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     return total_params, trainable_params
-
-
-
+  
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger_std = logging.getLogger(__name__)
+
+def evaluate_class_accuracy(model, val_dataset, device):
+    """Evaluate and display model accuracy by class"""
+    from torch.utils.data import DataLoader
+    
+    # Create DataLoader for validation set
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=32,  # Use a reasonable batch size
+        shuffle=False,
+        num_workers=4,
+    )
+    
+    # Set model to evaluation mode
+    model.eval()
+    
+    # Define view classes
+    view_thresholds = [0, 1000, 10000, 100000, 1000000, float('inf')]
+    labels = ["Hidden Gems", "Rising Stars", "Solid Performers", "Viral Hits", "Mega Blockbusters"]
+    
+    def assign_view_class(views):
+        for i in range(len(view_thresholds) - 1):
+            if view_thresholds[i] <= views < view_thresholds[i+1]:
+                return labels[i]
+        return labels[-1]
+    
+    # Collect all predictions and ground truth
+    all_preds = []
+    all_targets = []
+    all_ids = []
+    
+    for batch in val_loader:
+        batch["image"] = batch["image"].to(device)
+        with torch.no_grad():
+            preds = model(batch).squeeze().cpu().numpy()
+        
+        all_preds.extend(preds)
+        all_targets.extend(batch["views"].cpu().numpy())
+        if "id" in batch:
+            all_ids.extend(batch["id"])
+    
+    # Create dataframe for analysis
+    if all_ids:
+        results_df = pd.DataFrame({
+            "ID": all_ids,
+            "true_views": all_targets,
+            "predicted_views": all_preds
+        })
+    else:
+        results_df = pd.DataFrame({
+            "true_views": all_targets,
+            "predicted_views": all_preds
+        })
+    
+    # Classify into view classes
+    results_df['true_class'] = results_df['true_views'].apply(assign_view_class)
+    results_df['predicted_class'] = results_df['predicted_views'].apply(assign_view_class)
+    
+    # Compute correct class predictions
+    results_df['correct'] = results_df['true_class'] == results_df['predicted_class']
+    
+    # Overall accuracy
+    overall_accuracy = results_df['correct'].mean() * 100
+    print(f"\n----- VALIDATION ACCURACY BY CLASS -----")
+    print(f"Overall Accuracy: {overall_accuracy:.2f}%")
+    
+    # Class-wise accuracy only
+    print("\nClass-wise Accuracy:")
+    
+    for label in labels:
+        class_df = results_df[results_df['true_class'] == label]
+        if len(class_df) > 0:
+            accuracy = class_df['correct'].mean() * 100
+            print(f"{label}:")
+            print(f"  - Count: {len(class_df)} samples")
+            print(f"  - Accuracy: {accuracy:.2f}%")
+    
+    # Confusion Matrix
+    print("\nConfusion Matrix (%):")
+    confusion = pd.crosstab(
+        results_df['true_class'], 
+        results_df['predicted_class'],
+        normalize='index'
+    ).round(3) * 100
+    
+    print(confusion)
+    print(f"\n----- END OF VALIDATION ACCURACY -----")
+    
+    return results_df
 
 @hydra.main(config_path="configs", config_name="train")
 def train(cfg):
@@ -35,8 +129,11 @@ def train(cfg):
     logger_std.info(f"\n Pourcentage de paramètres entraînables: {100 * trainable_params / total_params:.2f}%")
     
     try:
-        model.load_checkpoint(cfg.checkpoint_to_load, load_full=True)
-        logger_std.info(f"Checkpoint loaded from {cfg.checkpoint_to_load}")
+        if hasattr(cfg, 'checkpoint_to_load') and cfg.checkpoint_to_load:
+            model.load_checkpoint(cfg.checkpoint_to_load, load_full=True)
+            logger_std.info(f"Checkpoint loaded from {cfg.checkpoint_to_load}")
+        else:
+            logger_std.info("No checkpoint specified, starting from scratch")
     except Exception as e:
         logger_std.info(f"Error loading checkpoint: {e}")
     optimizer = hydra.utils.instantiate(cfg.optim, params=model.parameters())
@@ -51,6 +148,20 @@ def train(cfg):
     loss_fn = hydra.utils.instantiate(cfg.loss_fn)
     datamodule = hydra.utils.instantiate(cfg.datamodule)
     train_loader = datamodule.train_dataloader()
+    train_set = datamodule.train
+    val_set = datamodule.val
+    logger_std.info(f"train_set: {len(train_set)}")
+    logger_std.info(f"val_set: {len(val_set)}")
+
+
+    # check  is we trained the model bert tiny or not
+    if cfg.model.train_bert_tiny:
+        #entrainement du model de LLM bert tiny 
+        _,bert_tiny_train_name = train_bert_tiny(train_set, val_set, tokenizer_name="prajjwal1/bert-tiny", model_name="prajjwal1/bert-tiny", epochs=50, device=device)
+        #chargement du model bert tiny
+        model.load_model(bert_tiny_train_name) #permet de charger uniquement les paramètres du model bert tinyentrainé 
+
+
     val_loader = datamodule.val_dataloader()
     train_sanity = show_images(train_loader, name="assets/sanity/train_images")
     (
@@ -187,6 +298,12 @@ def train(cfg):
     
     # Inform about the best model
     logger_std.info(f"Best model saved to {best_model_path} with validation loss: {best_val_loss:.4f}")
+    # #load the best model 
+    # checkpoint = torch.load(best_model_path)
+    # model.load_state_dict(checkpoint)
+    # # Evaluate accuracy by class on validation set
+    # logger_std.info("Evaluating accuracy by class on validation set...")
+    # evaluate_class_accuracy(model, val_set, device)
 
 
 if __name__ == "__main__":

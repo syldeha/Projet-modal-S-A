@@ -112,14 +112,19 @@ class Dataset(torch.utils.data.Dataset):
                 info = train_set
             elif train_or_val_or_test == "val":
                 info = val_set
-        # For test set, we use the entire dataset
-        
+            # For test set, we use the entire dataset
+
         info["description"] = info["description"].fillna("") #recuperation de la description
         info["title"] = info["title"].fillna("")
         info["meta"] = info[metadata].agg(" + ".join, axis=1) #concatenation des metadata
         if "views" in info.columns:
             self.targets = info["views"].values
-
+        #creation des labels pour le dataset d'entrainement du LLM bert tiny
+        if "view_classes" in info.columns:
+            unique_classes = sorted(info["view_classes"].unique())
+            self.class2idx = {c: i for i, c in enumerate(unique_classes)}
+            self.idx2class = {i: c for c, i in self.class2idx.items()}
+            self.labels = torch.tensor([self.class2idx[c] for c in info["view_classes"]], dtype=torch.long)
         # - ids
         self.ids = info["id"].values
         # - text
@@ -190,15 +195,29 @@ class Dataset(torch.utils.data.Dataset):
             f"{self.dataset_path}/{self.split}/{self.ids[idx]}.jpg"
         ).convert("RGB")
         image = self.transforms(image)
+        
         #construction du dictionnaire qu'on va utiliser lors de l'entrainement
-        value = {
-            "id": self.ids[idx],
-            "image": image,
-            "text": self.text[idx],
-            "description": self.description[idx],
-            "title": self.title[idx],
-        }
+        if hasattr(self, "labels"):
+            value = {
+                "id": self.ids[idx],
+                "image": image,
+                "text": self.text[idx],
+                "description": self.description[idx],
+                "title": self.title[idx],
+                "labels": self.labels[idx],
+                "label_str": self.idx2class[self.labels[idx].item()]
+            }
+        else:
+            value = {
+                "id": self.ids[idx],
+                "image": image,
+                "text": self.text[idx],
+                "description": self.description[idx],
+                "title": self.title[idx],
+            }
+        
         # - don't have the target for test
         if hasattr(self, "targets"):
             value["target"] = torch.tensor(self.targets[idx], dtype=torch.float32)
+        
         return value

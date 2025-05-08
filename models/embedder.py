@@ -6,6 +6,10 @@ import torch.nn as nn
 from transformers import AutoModel, AutoTokenizer
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
+import logging
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger_std = logging.getLogger(__name__)
 
 # ----- CSV Processing -----
 def process_youtube_csv(csv_path):
@@ -24,8 +28,9 @@ def process_youtube_csv(csv_path):
         df['channel_real_name'] = df['channel'].map(channel_mapping)
     return df
 
+
 # ----- Dataset -----
-class ToyDataset(Dataset):
+class EmbedderTrainingDataset(Dataset):
     def __init__(self, tokenizer, csv_path, max_length=32):
         self.dataframe = process_youtube_csv(csv_path)
         self.encodings = tokenizer(
@@ -48,6 +53,86 @@ class ToyDataset(Dataset):
         item["label_str"] = self.dataframe["view_classes"].iloc[idx]
         return item
 
+def train_bert_tiny(train_set, val_set, tokenizer_name, model_name, device, epochs=5):
+    """
+    Entrainement du model de LLM bert tiny
+    """
+    criterion = nn.CrossEntropyLoss()
+    model = MyLLM(tokenizer_name, model_name, num_classes=len(train_set.class2idx), device=device)
+    model.to(device)
+    model.train()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
+    logger_std.info(f"Entrainement du model {model_name} sur {epochs} epochs")
+    val_loader = DataLoader(val_set, batch_size=16, shuffle=False)
+    train_loader = DataLoader(train_set, batch_size=16, shuffle=True)
+
+    for epoch in range(epochs):
+        model.train()
+        total_loss = 0
+        pbar = tqdm(train_loader, desc=f"Training Epoch {epoch+1}", leave=False)
+        for batch in pbar:
+            # batch['title'] = liste de strings
+            input_titles = batch['title']
+            labels = batch['labels'].to(device)
+            optimizer.zero_grad()
+            output = model(input_titles)  # le model doit tokeniser en interne
+            loss = criterion(output, labels)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+            pbar.set_postfix({"loss": loss.item()})
+        logger_std.info(f"Epoch {epoch+1} Loss: {total_loss / len(train_loader):.4f}")
+
+    # Validation
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for batch in val_loader:
+            input_titles = batch['title']
+            labels = batch['labels'].to(device)
+            output = model(input_titles)
+            preds = output.argmax(dim=1)
+            correct += (preds == labels).sum().item()
+            total += labels.size(0)
+    
+    val_accuracy = correct / total if total > 0 else 0
+    logger_std.info(f"Validation accuracy: {val_accuracy:.4f}")
+
+    # Sauvegarde du modèle au format pytorch classique
+    save_name = f"bert_tiny_embedder_train_best_{epochs}"
+    model.text_encoder.push_to_hub(
+    f"{save_name}", 
+    exist_ok=True, 
+    )
+    logger_std.info(f"Model {model_name} saved on huggingface")
+
+    return total_loss / len(train_loader), save_name
+
+
+#--------MODEL DE BERT TINY--------
+class MyLLM(nn.Module):
+    def __init__(self, tokenizer_name, base_model_path, num_classes, device):
+        super().__init__()
+        self.text_encoder = AutoModel.from_pretrained(base_model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        hidden_size = self.text_encoder.config.hidden_size
+        self.classifier = nn.Linear(hidden_size, num_classes)
+        self.device = device
+    def forward(self, titles):
+        # device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Tokenize in forward!
+        encoded = self.tokenizer(
+            titles, 
+            padding=True, truncation=True, 
+            return_tensors="pt",
+            max_length=64
+        )
+        input_ids = encoded["input_ids"].to(self.device)
+        attention_mask = encoded["attention_mask"].to(self.device)
+        output = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask)
+        pooled = output.last_hidden_state[:, 0]
+        return self.classifier(pooled)
 # ----- Model -----
 class MyCustomLLM(nn.Module):
     def __init__(self, base_model_path, num_classes):

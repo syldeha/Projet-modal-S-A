@@ -1,5 +1,7 @@
 instance: 
   _target_: models.dinov2_with_embed.DinoV2WithEmbed
   frozen: True
+  vis_coef: 0.75
+  txt_coef: 0.25
 
 name: dinov2_with_embed

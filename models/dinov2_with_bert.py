@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger_std = logging.getLogger(__name__)
 
 class DinoV2WithBert(nn.Module):
-    def __init__(self, frozen=False , pretrained_model="Syldehayem/bert_tiny_embedder_train_best_10", tokenizer_model_path="prajjwal1/bert-tiny",vis_coef=0.75,txt_coef=0.25):
+    def __init__(self, frozen=False , pretrained_model="distilbert-base-uncased", tokenizer_model_path="distilbert-base-uncased",vis_coef=1.,txt_coef=1.5):
         super().__init__()
         logger_std.info(f"Initialisation du model DinoV2WithBert")
         # Vision backbone

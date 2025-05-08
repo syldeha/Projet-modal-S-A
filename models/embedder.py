@@ -61,7 +61,7 @@ def train_bert_tiny(train_set, val_set, tokenizer_name, model_name, device, epoc
     model = MyLLM(tokenizer_name, model_name, num_classes=len(train_set.class2idx), device=device)
     model.to(device)
     model.train()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
     logger_std.info(f"Entrainement du model {model_name} sur {epochs} epochs")
     val_loader = DataLoader(val_set, batch_size=16, shuffle=False)
     train_loader = DataLoader(train_set, batch_size=16, shuffle=True)
@@ -100,7 +100,7 @@ def train_bert_tiny(train_set, val_set, tokenizer_name, model_name, device, epoc
     logger_std.info(f"Validation accuracy: {val_accuracy:.4f}")
 
     # Sauvegarde du modèle au format pytorch classique
-    save_name = f"bert_tiny_embedder_train_best_{epochs}"
+    save_name = f"train_{model_name}_{epochs}"
     model.text_encoder.push_to_hub(
     f"{save_name}", 
     exist_ok=True, 
@@ -201,9 +201,9 @@ def compute_accuracy_on_results(results):
     return correct / len(results) if len(results) else 0.0
 
 if __name__ == "__main__":
-    pretrained_model = "Syldehayem/bert_tiny_embedder_train"
+    pretrained_model = "distilbert-base-uncased"
     # pretrained_model = "prajjwal1/bert-tiny"
-    tokenizer_model_path = "prajjwal1/bert-tiny"
+    tokenizer_model_path = "distilbert-base-uncased"
     num_classes = 5
     device = "cuda" if torch.cuda.is_available() else "cpu"
     csv_path = "/users/eleves-b/2023/sylvain.dehayem-kenfouo/projet_final_modal/dataset/train_val.csv"
@@ -235,7 +235,7 @@ if __name__ == "__main__":
 
     #save the model on my account 
     model.backbone.push_to_hub(
-    "bert_tiny_embedder_train_best", 
+    "distilbert_embedder_train_best", 
     # organization="embedding-data",
     # train_datasets=["embedding-data/QQP_triplets"],
     exist_ok=True, 

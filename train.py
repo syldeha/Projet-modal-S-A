@@ -157,9 +157,12 @@ def train(cfg):
     # check  is we trained the model bert tiny or not
     if cfg.model.train_bert_tiny:
         #entrainement du model de LLM bert tiny 
-        _,bert_tiny_train_name = train_bert_tiny(train_set, val_set, tokenizer_name="prajjwal1/bert-tiny", model_name="prajjwal1/bert-tiny", epochs=50, device=device)
+        _,bert_tiny_train_name = train_bert_tiny(train_set, val_set, tokenizer_name=cfg.model.tokenizer_path, model_name=cfg.model.model_path, epochs=cfg.model.epochs, device=device)
         #chargement du model bert tiny
         model.load_model(bert_tiny_train_name) #permet de charger uniquement les paramètres du model bert tinyentrainé 
+    # else:
+    #     if cfg.model.load_model_path:
+    #         model.load_model(cfg.model.load_model_path)
 
 
     val_loader = datamodule.val_dataloader()

@@ -39,7 +39,7 @@ class DataModule:
             self.dataset_path,
             self.train_transform,
             self.metadata,
-            split_ratio=0.9
+            split_ratio=0.8
         )
 
     def train_dataloader(self):

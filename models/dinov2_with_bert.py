@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger_std = logging.getLogger(__name__)
 
 class DinoV2WithBert(nn.Module):
-    def __init__(self, frozen=False , pretrained_model="distilbert-base-uncased", tokenizer_model_path="distilbert-base-uncased",vis_coef=1.,txt_coef=1.5):
+    def __init__(self, frozen=False , pretrained_model="distilbert-base-uncased", tokenizer_model_path="distilbert-base-uncased",vis_coef=0.8,txt_coef=1.0, fusion_dropout=0.2):
         super().__init__()
         logger_std.info(f"Initialisation du model DinoV2WithBert")
         # Vision backbone
@@ -42,17 +42,27 @@ class DinoV2WithBert(nn.Module):
             self.txt_proj = nn.Linear(self.text_dim, fusion_dim)
         else:
             self.txt_proj = nn.Identity()
+        #**Fusion complète par concaténation, puis projection**
+        self.fusion_proj = nn.Linear(2*fusion_dim, fusion_dim)
+
+        # Normalisation
+        self.norm = nn.LayerNorm(fusion_dim)
+
 
         # Tête de régression finale (ou classification selon tes besoins)
         self.regression_head = nn.Sequential(
             nn.Linear(fusion_dim, 256),
-            nn.GELU(),
+            nn.Mish(),
+            nn.Dropout(fusion_dropout),
             nn.Linear(256, 128),
-            nn.GELU(),
+            nn.Mish(),
+            nn.Dropout(fusion_dropout),
             nn.Linear(128, 64),
-            nn.GELU(),
+            nn.Mish(),
+            nn.Dropout(fusion_dropout),
             nn.Linear(64, 32),
-            nn.GELU(),
+            nn.Mish(),
+            nn.Dropout(fusion_dropout),
             nn.Linear(32, 1),
             nn.ReLU(),
         )
@@ -67,15 +77,18 @@ class DinoV2WithBert(nn.Module):
         # 2. Encode text
         # Assurez-vous que le tokenizer est sur le même device que l'image
         device = v_feat.device
-        encoded = self.tokenizer(x["prompt_resume"], padding=True, truncation=True, return_tensors='pt')
+        encoded = self.tokenizer(x["title"], padding=True, truncation=True, return_tensors='pt')
         # Déplacer les tenseurs vers le bon device
         encoded = {k: v.to(device) for k, v in encoded.items()}
         out = self.text_encoder(**encoded)
         t_feat = out.last_hidden_state[:, 0]
         t_feat = self.txt_proj(t_feat)       # [batch, fusion_dim]
 
-        # 3. Fusion (addition pondérée)
-        z = self.vis_coef * v_feat + self.txt_coef * t_feat
+        # -FUSION par concat + projection
+        z = torch.cat([self.vis_coef * v_feat, self.txt_coef * t_feat], dim=1)  # (Batch, 2*fusion_dim)
+        z = self.fusion_proj(z)   # (Batch, fusion_dim)
+        #normalisation
+        z = self.norm(z)
 
         # 4. Régression
         out = self.regression_head(z)

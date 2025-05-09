@@ -59,9 +59,9 @@ def make_prompt(entry):
     date = entry['year']  # Garde juste l'année/mois/jour si besoin
     desc_clean = clean_description(entry['description'])
     return (
-        f"La vidéo \"{title}\" publiée par la chaîne {channel} en {date} parle de : {desc_clean}"
+        f"La vidéo \"{title}\" publiée par la chaîne {channel} en {date} parle de : {desc_clean}. Quel est le nombre de vues de la vidéo ?"
         if desc_clean else
-        f"La vidéo \"{title}\" publiée par la chaîne {channel} en {date}."
+        f"La vidéo \"{title}\" publiée par la chaîne {channel} en {date}. Quel est le nombre de vues de la vidéo ?"
     )
 def process_youtube_csv(csv_path):
     """

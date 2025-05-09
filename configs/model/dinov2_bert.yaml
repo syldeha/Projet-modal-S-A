@@ -5,5 +5,5 @@ name: dinov2_with_bert
 train_bert_tiny: False
 model_path: distilbert-base-uncased
 tokenizer_path: distilbert-base-uncased
-load_model_path: distilbert-base-uncased
-epochs: 20
+load_model_path: train_distilbert-base-uncased_20
+epochs: 5

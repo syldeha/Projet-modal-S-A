@@ -2,19 +2,6 @@ from torch.utils.data import DataLoader
 import torch
 from data.dataset import Dataset
 
-# def collate_fn_downsample(batch):
-#     SOLID_PERFORMERS_LABEL_IDX = 
-#     keep = []
-#     for item in batch:
-#         if item['labels'] == SOLID_PERFORMERS_LABEL_IDX:
-#             if random.random() < 0.5:
-#                 keep.append(item)
-#         else:
-#             keep.append(item)
-#     if not keep:
-#         # Assure au moins 1 exemple
-#         keep.append(random.choice(batch))
-#     return {k: [d[k] for d in keep] for k in keep[0]}  # format batch standard
 
 
 class DataModule:
@@ -39,7 +26,7 @@ class DataModule:
             self.dataset_path,
             self.train_transform,
             self.metadata,
-            split_ratio=0.8
+            val_year_min=2020
         )
 
     def train_dataloader(self):
@@ -53,6 +40,8 @@ class DataModule:
 
     def val_dataloader(self):
         """Validation dataloader."""
+        if self.val is None:
+            return None
         return DataLoader(
             self.val,
             batch_size=self.batch_size,

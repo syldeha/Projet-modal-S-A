@@ -13,7 +13,9 @@ class DinoV2Finetune(nn.Module):
                 param.requires_grad = False
         self.regression_head = nn.Sequential(
             nn.Linear(self.backbone.norm.normalized_shape[0], 256),
-            nn.ReLU(),
+            nn.GELU(),
+            nn.Linear(256, 256),
+            nn.GELU(),
             nn.Linear(256, 1),
             nn.ReLU(),
         )

@@ -134,31 +134,29 @@ def feature_percentage_dict(df, feature_name):
     percentages = (counts / len(df) * 100).to_dict()
     return percentages
 
-def split_function(dataframe, split_ration):
-    """
-    Fonction qui permet de séparer les données en train et val
-     dataframe : dataframe contant toutes les données
-     split_ration : ration de séparation entre train et val
+def split_function(dataframe,val_year_min, year_column="year"):
+    df = dataframe.copy()
+    # Gère le cas val_year_min = None ou colonne année absente
+    if val_year_min is None or year_column not in df.columns:
+        logger_std.info("Pas de seuil d'année valide : tout dans le train, val=None.")
+        return df, None
 
-     return : train_set, val_set
-    """
-    test_size = 1-split_ration
-    if test_size <= 0:   
-        train_set = dataframe
-        val_set = None
-    else:
-        train_set, val_set = train_test_split(dataframe, test_size=test_size, random_state=42, shuffle=True, stratify=dataframe['view_classes'])
+    df[year_column] = pd.to_numeric(df[year_column], errors='coerce')
 
-    logger_std.info(f"train set : {feature_percentage_dict(train_set, 'view_classes')}")
-    if val_set is not None:
-        logger_std.info(f"val set : {feature_percentage_dict(val_set, 'view_classes')}")
-    else:
-        logger_std.info("val set : None")
+    # S'il n'y a aucune année >= val_year_min (pas de validation possible)
+    if not (df[year_column] >= val_year_min).any():
+        logger_std.info(f"Aucune donnée >= {val_year_min} dans '{year_column}' : tout dans le train, val=None.")
+        return df, None
 
+    val_set = df[df[year_column] >= val_year_min]
+    train_set = df[df[year_column] < val_year_min]
+
+    logger_std.info(f"train set (until {val_year_min-1}): {feature_percentage_dict(train_set, 'view_classes')}")
+    logger_std.info(f"val set (from {val_year_min}): {feature_percentage_dict(val_set, 'view_classes')}")
     return train_set, val_set
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, dataset_path, split, transforms, metadata, split_ratio, train_or_val_or_test:str):
+    def __init__(self, dataset_path, split, transforms, metadata, val_year_min, train_or_val_or_test:str):
         """
         Args:
             dataset_path (str): path to the dataset
@@ -182,7 +180,7 @@ class Dataset(torch.utils.data.Dataset):
             info = process_youtube_csv_test(info)
 
         if train_or_val_or_test in ["train", "val"] and split != "test":
-            train_set, val_set = split_function(info, split_ratio)
+            train_set, val_set = split_function(info, val_year_min)
             if train_or_val_or_test == "train":
                 info = train_set
             elif train_or_val_or_test == "val":
@@ -210,7 +208,7 @@ class Dataset(torch.utils.data.Dataset):
         self.prompt_resume = info["prompt_resume"].values
 
     @classmethod
-    def create_train_val_datasets(cls, dataset_path, transforms, metadata, split_ratio=0.9):
+    def create_train_val_datasets(cls, dataset_path, transforms, metadata, val_year_min):
         """
         Factory method to create both train and val datasets at once.
         
@@ -228,15 +226,15 @@ class Dataset(torch.utils.data.Dataset):
         info = process_youtube_csv(f"{dataset_path}/train_val.csv")
         
         # Split data once
-        train_info, val_info = split_function(info, split_ratio)
+        train_info, val_info = split_function(info, val_year_min)
         
         # Create train dataset
-        train_dataset = cls(dataset_path, "train_val", transforms, metadata, split_ratio, "train")
+        train_dataset = cls(dataset_path, "train_val", transforms, metadata, val_year_min, "train")
         # Manually set the data for train dataset
         train_dataset._set_data(train_info, metadata)
         
         # Create val dataset
-        val_dataset = cls(dataset_path, "train_val", transforms, metadata, split_ratio, "val")
+        val_dataset = cls(dataset_path, "train_val", transforms, metadata, val_year_min, "val")
         # Manually set the data for val dataset
         val_dataset._set_data(val_info, metadata)
         

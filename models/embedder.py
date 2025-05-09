@@ -72,7 +72,7 @@ def train_bert_tiny(train_set, val_set, tokenizer_name, model_name, device, epoc
         pbar = tqdm(train_loader, desc=f"Training Epoch {epoch+1}", leave=False)
         for batch in pbar:
             # batch['title'] = liste de strings
-            input_titles = batch['title']
+            input_titles = batch['prompt_resume']
             labels = batch['labels'].to(device)
             optimizer.zero_grad()
             output = model(input_titles)  # le model doit tokeniser en interne
@@ -89,7 +89,7 @@ def train_bert_tiny(train_set, val_set, tokenizer_name, model_name, device, epoc
     total = 0
     with torch.no_grad():
         for batch in val_loader:
-            input_titles = batch['title']
+            input_titles = batch['prompt_resume']
             labels = batch['labels'].to(device)
             output = model(input_titles)
             preds = output.argmax(dim=1)
@@ -102,7 +102,7 @@ def train_bert_tiny(train_set, val_set, tokenizer_name, model_name, device, epoc
     # Sauvegarde du modèle au format pytorch classique
     save_name = f"train_{model_name}_{epochs}"
     model.text_encoder.push_to_hub(
-    f"{save_name}", 
+    f"{save_name}_for_prompt_resume", 
     exist_ok=True, 
     )
     logger_std.info(f"Model {model_name} saved on huggingface")

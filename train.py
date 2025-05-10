@@ -24,94 +24,94 @@ def count_parameters(model):
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger_std = logging.getLogger(__name__)
 
-def evaluate_class_accuracy(model, val_dataset, device):
-    """Evaluate and display model accuracy by class"""
-    from torch.utils.data import DataLoader
+# def evaluate_class_accuracy(model, val_dataset, device):
+#     """Evaluate and display model accuracy by class"""
+#     from torch.utils.data import DataLoader
     
-    # Create DataLoader for validation set
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=32,  # Use a reasonable batch size
-        shuffle=False,
-        num_workers=4,
-    )
+#     # Create DataLoader for validation set
+#     val_loader = DataLoader(
+#         val_dataset,
+#         batch_size=32,  # Use a reasonable batch size
+#         shuffle=False,
+#         num_workers=4,
+#     )
     
-    # Set model to evaluation mode
-    model.eval()
+#     # Set model to evaluation mode
+#     model.eval()
     
-    # Define view classes
-    view_thresholds = [0, 1000, 10000, 100000, 1000000, float('inf')]
-    labels = ["Hidden Gems", "Rising Stars", "Solid Performers", "Viral Hits", "Mega Blockbusters"]
+#     # Define view classes
+#     view_thresholds = [0, 1000, 10000, 100000, 1000000, float('inf')]
+#     labels = ["Hidden Gems", "Rising Stars", "Solid Performers", "Viral Hits", "Mega Blockbusters"]
     
-    def assign_view_class(views):
-        for i in range(len(view_thresholds) - 1):
-            if view_thresholds[i] <= views < view_thresholds[i+1]:
-                return labels[i]
-        return labels[-1]
+#     def assign_view_class(views):
+#         for i in range(len(view_thresholds) - 1):
+#             if view_thresholds[i] <= views < view_thresholds[i+1]:
+#                 return labels[i]
+#         return labels[-1]
     
-    # Collect all predictions and ground truth
-    all_preds = []
-    all_targets = []
-    all_ids = []
+#     # Collect all predictions and ground truth
+#     all_preds = []
+#     all_targets = []
+#     all_ids = []
     
-    for batch in val_loader:
-        batch["image"] = batch["image"].to(device)
-        with torch.no_grad():
-            preds = model(batch).squeeze().cpu().numpy()
+#     for batch in val_loader:
+#         batch["image"] = batch["image"].to(device)
+#         with torch.no_grad():
+#             preds = model(batch).squeeze().cpu().numpy()
         
-        all_preds.extend(preds)
-        all_targets.extend(batch["views"].cpu().numpy())
-        if "id" in batch:
-            all_ids.extend(batch["id"])
+#         all_preds.extend(preds)
+#         all_targets.extend(batch["views"].cpu().numpy())
+#         if "id" in batch:
+#             all_ids.extend(batch["id"])
     
-    # Create dataframe for analysis
-    if all_ids:
-        results_df = pd.DataFrame({
-            "ID": all_ids,
-            "true_views": all_targets,
-            "predicted_views": all_preds
-        })
-    else:
-        results_df = pd.DataFrame({
-            "true_views": all_targets,
-            "predicted_views": all_preds
-        })
+#     # Create dataframe for analysis
+#     if all_ids:
+#         results_df = pd.DataFrame({
+#             "ID": all_ids,
+#             "true_views": all_targets,
+#             "predicted_views": all_preds
+#         })
+#     else:
+#         results_df = pd.DataFrame({
+#             "true_views": all_targets,
+#             "predicted_views": all_preds
+#         })
     
-    # Classify into view classes
-    results_df['true_class'] = results_df['true_views'].apply(assign_view_class)
-    results_df['predicted_class'] = results_df['predicted_views'].apply(assign_view_class)
+#     # Classify into view classes
+#     results_df['true_class'] = results_df['true_views'].apply(assign_view_class)
+#     results_df['predicted_class'] = results_df['predicted_views'].apply(assign_view_class)
     
-    # Compute correct class predictions
-    results_df['correct'] = results_df['true_class'] == results_df['predicted_class']
+#     # Compute correct class predictions
+#     results_df['correct'] = results_df['true_class'] == results_df['predicted_class']
     
-    # Overall accuracy
-    overall_accuracy = results_df['correct'].mean() * 100
-    print(f"\n----- VALIDATION ACCURACY BY CLASS -----")
-    print(f"Overall Accuracy: {overall_accuracy:.2f}%")
+#     # Overall accuracy
+#     overall_accuracy = results_df['correct'].mean() * 100
+#     print(f"\n----- VALIDATION ACCURACY BY CLASS -----")
+#     print(f"Overall Accuracy: {overall_accuracy:.2f}%")
     
-    # Class-wise accuracy only
-    print("\nClass-wise Accuracy:")
+#     # Class-wise accuracy only
+#     print("\nClass-wise Accuracy:")
     
-    for label in labels:
-        class_df = results_df[results_df['true_class'] == label]
-        if len(class_df) > 0:
-            accuracy = class_df['correct'].mean() * 100
-            print(f"{label}:")
-            print(f"  - Count: {len(class_df)} samples")
-            print(f"  - Accuracy: {accuracy:.2f}%")
+#     for label in labels:
+#         class_df = results_df[results_df['true_class'] == label]
+#         if len(class_df) > 0:
+#             accuracy = class_df['correct'].mean() * 100
+#             print(f"{label}:")
+#             print(f"  - Count: {len(class_df)} samples")
+#             print(f"  - Accuracy: {accuracy:.2f}%")
     
-    # Confusion Matrix
-    print("\nConfusion Matrix (%):")
-    confusion = pd.crosstab(
-        results_df['true_class'], 
-        results_df['predicted_class'],
-        normalize='index'
-    ).round(3) * 100
+#     # Confusion Matrix
+#     print("\nConfusion Matrix (%):")
+#     confusion = pd.crosstab(
+#         results_df['true_class'], 
+#         results_df['predicted_class'],
+#         normalize='index'
+#     ).round(3) * 100
     
-    print(confusion)
-    print(f"\n----- END OF VALIDATION ACCURACY -----")
+#     print(confusion)
+#     print(f"\n----- END OF VALIDATION ACCURACY -----")
     
-    return results_df
+#     return results_df
 
 @hydra.main(config_path="configs", config_name="train")
 def train(cfg):
@@ -151,7 +151,8 @@ def train(cfg):
     train_set = datamodule.train
     val_set = datamodule.val
     logger_std.info(f"train_set: {len(train_set)}")
-    logger_std.info(f"val_set: {len(val_set)}")
+    if val_set is not None:
+        logger_std.info(f"val_set: {len(val_set)}")
 
 
     # check  is we trained the model bert tiny or not
@@ -166,7 +167,14 @@ def train(cfg):
         #         model.load_model(cfg.model.load_model_path)
     except Exception as e:
         logger_std.info(f"No training of bert tiny: {e}")
-
+    #check for the training of flant5
+    try:
+        if cfg.model.train_flant5:
+            logger_std.info(f"Training of flant5")
+            _,flant5_train_name = train_flant5(train_set, val_set, tokenizer_name=cfg.model.tokenizer_path, model_name=cfg.model.model_path, epochs=cfg.model.epochs, device=device , learning_rate=cfg.model.learning_rate)
+            model.load_model(flant5_train_name)
+    except Exception as e:
+        logger_std.info(f"No training of flant5: {e}")
 
     val_loader = datamodule.val_dataloader()
     train_sanity = show_images(train_loader, name="assets/sanity/train_images")
@@ -304,13 +312,6 @@ def train(cfg):
     
     # Inform about the best model
     logger_std.info(f"Best model saved to {best_model_path} with validation loss: {best_val_loss:.4f}")
-    # #load the best model 
-    # checkpoint = torch.load(best_model_path)
-    # model.load_state_dict(checkpoint)
-    # # Evaluate accuracy by class on validation set
-    # logger_std.info("Evaluating accuracy by class on validation set...")
-    # evaluate_class_accuracy(model, val_set, device)
-
 
 if __name__ == "__main__":
     train()

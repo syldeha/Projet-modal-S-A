@@ -1,17 +1,17 @@
 import torch
 import torch.nn as nn
 import os
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer, T5EncoderModel, T5Tokenizer
 
 import logging
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger_std = logging.getLogger(__name__)
 
-class DinoV2WithBert(nn.Module):
-    def __init__(self, frozen=False , pretrained_model="distilbert-base-uncased", tokenizer_model_path="distilbert-base-uncased",vis_coef=1.0,txt_coef=1.0, fusion_dropout=0.2):
+class DinoV2WithFlant5(nn.Module):
+    def __init__(self, frozen=False , pretrained_model="google/flan-t5-small", tokenizer_model_path="google/flan-t5-small",vis_coef=1.0,txt_coef=1.0, fusion_dropout=0.2):
         super().__init__()
-        logger_std.info(f"Initialisation du model DinoV2WithBert")
+        logger_std.info(f"Initialisation du model DinoV2WithFlant5")
         # Vision backbone
         self.backbone = torch.hub.load("facebookresearch/dinov2", "dinov2_vitb14_reg")
         self.backbone.head = nn.Identity()
@@ -21,8 +21,8 @@ class DinoV2WithBert(nn.Module):
                 param.requires_grad = False
 
         # Text backbone (Transformer)
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_path)
-        self.text_encoder = AutoModel.from_pretrained(pretrained_model)
+        self.tokenizer = T5Tokenizer.from_pretrained(tokenizer_model_path)
+        self.text_encoder = T5EncoderModel.from_pretrained(pretrained_model)
         self.text_dim = self.text_encoder.config.hidden_size
         if frozen:
             for param in self.text_encoder.parameters():
@@ -74,10 +74,10 @@ class DinoV2WithBert(nn.Module):
         # Assurez-vous que le tokenizer est sur le même device que l'image
         device = v_feat.device
         encoded = self.tokenizer(x["prompt_resume"], padding=True, truncation=True, return_tensors='pt')
+        #Utilisation de tous les tokens de sorties et non uniquement le token [CLS]
         # Déplacer les tenseurs vers le bon device
         encoded = {k: v.to(device) for k, v in encoded.items()}
         out = self.text_encoder(**encoded)
-        # t_feat = out.last_hidden_state[:, 0]
         # 1. Multiply embeddings by the attention mask (to "zero out" padded tokens)
         input_mask_expanded = encoded["attention_mask"].unsqueeze(-1).expand(out.last_hidden_state.size()).float()
         # 2. Sum along the token dimension (dim=1)
@@ -86,6 +86,7 @@ class DinoV2WithBert(nn.Module):
         sum_mask = input_mask_expanded.sum(1)
         # 4. Divide summed embeddings by the (nonzero) sum of mask: this gives the **mean** (average)
         t_feat = sum_embeddings / sum_mask.clamp(min=1e-9)
+        #Projection
         t_feat = self.txt_proj(t_feat)       # [batch, fusion_dim]
 
         # -FUSION par concat + projection

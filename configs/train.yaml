@@ -2,10 +2,10 @@ defaults:
     - _self_
     - dataset: default
     - optim: adamw
-    - model: dinov2
+    - model: dinov2_flanT5
     - loss_fn: msle
 
-epochs: 5
+epochs: 10
 log: True
 prefix: ""
 experiment_name: ${prefix}${model.name}_${now:%Y-%m-%d_%H-%M-%S}
@@ -29,8 +29,8 @@ datamodule:
 
 data_dir: ${root_dir}/dataset/
 root_dir: ${hydra:runtime.cwd}
-checkpoint_path: ${root_dir}/checkpoints/${experiment_name}_dinov2.pt
-# checkpoint_to_load: ${root_dir}/checkpoints/dinov2_with_bert_2025-05-08_23-11-49_with_bert__best.pt
+checkpoint_path: ${root_dir}/checkpoints/${experiment_name}_dinov2_flanT5_prompt_resume.pt
+# checkpoint_to_load: ${root_dir}/checkpoints/dinov2_with_bert_2025-05-10_02-15-20_dinov2_bert_prompt_resume_best.pt
 
 
 

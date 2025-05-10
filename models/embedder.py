@@ -15,7 +15,7 @@ logger_std = logging.getLogger(__name__)
 def process_youtube_csv(csv_path):
     df = pd.read_csv(csv_path)
     view_thresholds = [0, 1000, 10000, 100000, 1000000, float('inf')]
-    labels = ["Hidden Gems", "Rising Stars", "Solid Performers", "Viral Hits", "Mega Blockbusters"]
+    labels = ["low", "medium", "high", "viral", "top"]
     def assign_view_class(views):
         for i in range(len(view_thresholds) - 1):
             if view_thresholds[i] <= views < view_thresholds[i+1]:
@@ -61,7 +61,7 @@ def train_bert_tiny(train_set, val_set, tokenizer_name, model_name, device, epoc
     model = MyLLM(tokenizer_name, model_name, num_classes=len(train_set.class2idx), device=device)
     model.to(device)
     model.train()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=5e-4)
     logger_std.info(f"Entrainement du model {model_name} sur {epochs} epochs")
     val_loader = DataLoader(val_set, batch_size=16, shuffle=False)
     train_loader = DataLoader(train_set, batch_size=16, shuffle=True)
@@ -72,7 +72,7 @@ def train_bert_tiny(train_set, val_set, tokenizer_name, model_name, device, epoc
         pbar = tqdm(train_loader, desc=f"Training Epoch {epoch+1}", leave=False)
         for batch in pbar:
             # batch['title'] = liste de strings
-            input_titles = batch['title']
+            input_titles = batch['prompt_resume']
             labels = batch['labels'].to(device)
             optimizer.zero_grad()
             output = model(input_titles)  # le model doit tokeniser en interne
@@ -83,21 +83,21 @@ def train_bert_tiny(train_set, val_set, tokenizer_name, model_name, device, epoc
             pbar.set_postfix({"loss": loss.item()})
         logger_std.info(f"Epoch {epoch+1} Loss: {total_loss / len(train_loader):.4f}")
 
-    # Validation
-    model.eval()
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for batch in val_loader:
-            input_titles = batch['title']
-            labels = batch['labels'].to(device)
-            output = model(input_titles)
-            preds = output.argmax(dim=1)
-            correct += (preds == labels).sum().item()
-            total += labels.size(0)
+        # Validation
+        # model.eval()
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for batch in val_loader:
+                input_titles = batch['prompt_resume']
+                labels = batch['labels'].to(device)
+                output = model(input_titles)
+                preds = output.argmax(dim=1)
+                correct += (preds == labels).sum().item()
+                total += labels.size(0)
     
-    val_accuracy = correct / total if total > 0 else 0
-    logger_std.info(f"Validation accuracy: {val_accuracy:.4f}")
+        val_accuracy = correct / total if total > 0 else 0
+        logger_std.info(f"Validation accuracy: {val_accuracy:.4f}")
 
     # Sauvegarde du modèle au format pytorch classique
     save_name = f"train_{model_name}_{epochs}"
@@ -118,7 +118,10 @@ class MyLLM(nn.Module):
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         hidden_size = self.text_encoder.config.hidden_size
         self.classifier = nn.Linear(hidden_size, num_classes)
+        self.linear = nn.Linear(hidden_size, hidden_size)
         self.device = device
+        for param in self.text_encoder.parameters():
+            param.requires_grad = False
     def forward(self, titles):
         # device = "cuda" if torch.cuda.is_available() else "cpu"
         # Tokenize in forward!
@@ -132,6 +135,7 @@ class MyLLM(nn.Module):
         attention_mask = encoded["attention_mask"].to(self.device)
         output = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask)
         pooled = output.last_hidden_state[:, 0]
+        pooled = self.linear(pooled)
         return self.classifier(pooled)
 # ----- Model -----
 class MyCustomLLM(nn.Module):

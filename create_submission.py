@@ -18,8 +18,8 @@ def create_submission(cfg):
             "test",
             transforms=hydra.utils.instantiate(cfg.datamodule.test_transform),
             metadata=cfg.datamodule.metadata,
-            split_ratio=1,
-            train_or_val_or_test="test"
+            train_or_val_or_test="test",
+            val_year_min=2024
         ),
         batch_size=cfg.datamodule.batch_size,
         shuffle=False,
@@ -47,7 +47,7 @@ def create_submission(cfg):
         )
     
     # Save the submission file
-    submission.to_csv(f"{cfg.root_dir}/submission_bert_tiny_with_title_3_35val_3_39_train.csv", index=False)
+    submission.to_csv(f"{cfg.root_dir}/submission_distiill_bert_with_title_3_55val_3_23_train.csv", index=False)
     
     # Analyze prediction distribution by class
     view_thresholds = [0, 1000, 10000, 100000, 1000000, float('inf')]

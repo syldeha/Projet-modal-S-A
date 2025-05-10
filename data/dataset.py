@@ -51,18 +51,23 @@ def clean_description(description):
 
 def make_prompt(entry):
     """
-    entry : dict ou pd.Series avec les clés 'title', 'channel', 'date', 'description'
-    => Renvoie un texte structuré et propre décrivant la vidéo
+    entry: dict or pd.Series with keys: 'title', 'channel_real_name', 'year', 'description'
     """
     title = entry['title']
     channel = entry['channel_real_name']
-    date = entry['year']  # Garde juste l'année/mois/jour si besoin
+    date = entry['year']
     desc_clean = clean_description(entry['description'])
-    return (
-        f"La vidéo \"{title}\" publiée par la chaîne {channel} en {date} parle de : {desc_clean}. Quel est le nombre de vues de la vidéo ?"
-        if desc_clean else
-        f"La vidéo \"{title}\" publiée par la chaîne {channel} en {date}. Quel est le nombre de vues de la vidéo ?"
-    )
+    
+    choices = "low, medium, high, viral, top"
+    instruction = f"""Given the following YouTube video metadata, classify its view category. Choices: {choices}
+
+Title: {title}
+Channel: {channel}
+Date: {date}"""
+    if desc_clean:
+        instruction += f"\nDescription: {desc_clean}"
+    instruction += "\n\nCategory:"
+    return instruction
 def process_youtube_csv(csv_path):
     """
     Fonction qui permet de modifier le fichier csv pour ajouter des colonnes , (view_classes, channel_real_name)
@@ -83,11 +88,11 @@ def process_youtube_csv(csv_path):
         float('inf')  # Infini
     ]
     labels = [
-        "Hidden Gems",
-        "Rising Stars",
-        "Solid Performers",
-        "Viral Hits",
-        "Mega Blockbusters"
+        "low",
+        "medium",
+        "high",
+        "viral",
+        "top"
     ]
     def assign_view_class(views):
         for i in range(len(view_thresholds) - 1):
@@ -226,17 +231,25 @@ class Dataset(torch.utils.data.Dataset):
         info = process_youtube_csv(f"{dataset_path}/train_val.csv")
         
         # Split data once
-        train_info, val_info = split_function(info, val_year_min)
+        if val_year_min >= 2024:
+            train_info, val_info = info, None
+            # Create train dataset
+            train_dataset = cls(dataset_path, "train_val", transforms, metadata, val_year_min, "train")
+            # Manually set the data for train dataset
+            train_dataset._set_data(train_info, metadata)
+            return train_dataset, None
+        else:
+            train_info, val_info = split_function(info, val_year_min)
         
-        # Create train dataset
-        train_dataset = cls(dataset_path, "train_val", transforms, metadata, val_year_min, "train")
-        # Manually set the data for train dataset
-        train_dataset._set_data(train_info, metadata)
-        
-        # Create val dataset
-        val_dataset = cls(dataset_path, "train_val", transforms, metadata, val_year_min, "val")
-        # Manually set the data for val dataset
-        val_dataset._set_data(val_info, metadata)
+            # Create train dataset
+            train_dataset = cls(dataset_path, "train_val", transforms, metadata, val_year_min, "train")
+            # Manually set the data for train dataset
+            train_dataset._set_data(train_info, metadata)
+            
+            # Create val dataset
+            val_dataset = cls(dataset_path, "train_val", transforms, metadata, val_year_min, "val")
+            # Manually set the data for val dataset
+            val_dataset._set_data(val_info, metadata)
         
         return train_dataset, val_dataset
         

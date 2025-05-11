@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger_std = logging.getLogger(__name__)
 
 class DinoV2WithFlant5(nn.Module):
-    def __init__(self, frozen=False , pretrained_model="google/flan-t5-small", tokenizer_model_path="google/flan-t5-small",vis_coef=1.0,txt_coef=1.0, fusion_dropout=0.2):
+    def __init__(self, frozen=False , pretrained_model="google/flan-t5-small", tokenizer_model_path="google/flan-t5-small",vis_coef=1.0,txt_coef=1.0, fusion_dropout=0.1):
         super().__init__()
         logger_std.info(f"Initialisation du model DinoV2WithFlant5")
         # Vision backbone
@@ -26,11 +26,11 @@ class DinoV2WithFlant5(nn.Module):
         self.text_dim = self.text_encoder.config.hidden_size
         if frozen:
             for param in self.text_encoder.parameters():
-                param.requires_grad = False
+                param.requires_grad = False 
 
-        # Fusion coefficients
-        self.vis_coef = vis_coef
-        self.txt_coef = txt_coef
+        # Fusion coefficients variable
+        self.vis_coef = nn.Parameter(torch.tensor(vis_coef))
+        self.txt_coef = nn.Parameter(torch.tensor(txt_coef))
 
         # Harmonisation des dims (projection si besoin)
         fusion_dim = max(self.vision_dim, self.text_dim)
@@ -55,11 +55,11 @@ class DinoV2WithFlant5(nn.Module):
             nn.BatchNorm1d(256),
             nn.GELU(),
             nn.Dropout(fusion_dropout),
-            nn.Linear(256, 256),
+            nn.Linear(256, 128),
             # nn.BatchNorm1d(256),
             nn.GELU(),
             nn.Dropout(fusion_dropout),
-            nn.Linear(256, 1),
+            nn.Linear(128, 1),
             nn.ReLU(),
         )
 
@@ -90,13 +90,15 @@ class DinoV2WithFlant5(nn.Module):
         t_feat = self.txt_proj(t_feat)       # [batch, fusion_dim]
 
         # -FUSION par concat + projection
-        z = torch.cat([self.vis_coef * v_feat, self.txt_coef * t_feat], dim=1)  # (Batch, 2*fusion_dim)
+        # z = torch.cat([self.vis_coef * v_feat, self.txt_coef * t_feat], dim=1)  # (Batch, 2*fusion_dim)
+        z=self.vis_coef * v_feat+self.txt_coef * t_feat
         z = self.fusion_proj(z)   # (Batch, fusion_dim)
         #normalisation
         z = self.norm(z)
 
         # 4. Régression
         out = self.regression_head(z)
+
         return out
 
     def load_checkpoint(self, checkpoint_path, device=torch.device("cuda" if torch.cuda.is_available() else "cpu"), load_full=True):
@@ -147,11 +149,11 @@ class DinoV2WithFlant5(nn.Module):
         
     def load_model(self, pretrained_model, frozen=True):
         pretrained_model_name = f"Syldehayem/{pretrained_model}"
-        logger_std.info(f"Chargement du model {pretrained_model} sur le model DinoV2WithBert ")
+        logger_std.info(f"Chargement du model {pretrained_model} sur le model DinoV2WithFlant5 ")
         # Déterminer le device actuel du modèle
         device = next(self.parameters()).device
-        # Charger le modèle BERT
-        self.text_encoder = AutoModel.from_pretrained(pretrained_model_name)
+        # Charger le modèle T5Encoder au lieu de AutoModel
+        self.text_encoder = T5EncoderModel.from_pretrained(pretrained_model_name)
         # Déplacer le modèle sur le même device que le modèle principal
         self.text_encoder = self.text_encoder.to(device)
         self.text_dim = self.text_encoder.config.hidden_size

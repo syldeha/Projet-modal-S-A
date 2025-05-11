@@ -47,7 +47,7 @@ def create_submission(cfg):
         )
     
     # Save the submission file
-    submission.to_csv(f"{cfg.root_dir}/submission_distiill_bert_with_title_3_55val_3_23_train.csv", index=False)
+    submission.to_csv(f"{cfg.root_dir}/submission_FLANT5_small_with_prompt_3_40val_3_78_train.csv", index=False)
     
     # Analyze prediction distribution by class
     view_thresholds = [0, 1000, 10000, 100000, 1000000, float('inf')]

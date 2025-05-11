@@ -9,6 +9,7 @@ import numpy as np
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from utils.sanity import show_images
 from models.embedder import train_bert_tiny,MyLLM
+from models.trainFlanT5 import train_flant5
 from transformers import AutoTokenizer
 
 
@@ -23,95 +24,6 @@ def count_parameters(model):
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger_std = logging.getLogger(__name__)
-
-# def evaluate_class_accuracy(model, val_dataset, device):
-#     """Evaluate and display model accuracy by class"""
-#     from torch.utils.data import DataLoader
-    
-#     # Create DataLoader for validation set
-#     val_loader = DataLoader(
-#         val_dataset,
-#         batch_size=32,  # Use a reasonable batch size
-#         shuffle=False,
-#         num_workers=4,
-#     )
-    
-#     # Set model to evaluation mode
-#     model.eval()
-    
-#     # Define view classes
-#     view_thresholds = [0, 1000, 10000, 100000, 1000000, float('inf')]
-#     labels = ["Hidden Gems", "Rising Stars", "Solid Performers", "Viral Hits", "Mega Blockbusters"]
-    
-#     def assign_view_class(views):
-#         for i in range(len(view_thresholds) - 1):
-#             if view_thresholds[i] <= views < view_thresholds[i+1]:
-#                 return labels[i]
-#         return labels[-1]
-    
-#     # Collect all predictions and ground truth
-#     all_preds = []
-#     all_targets = []
-#     all_ids = []
-    
-#     for batch in val_loader:
-#         batch["image"] = batch["image"].to(device)
-#         with torch.no_grad():
-#             preds = model(batch).squeeze().cpu().numpy()
-        
-#         all_preds.extend(preds)
-#         all_targets.extend(batch["views"].cpu().numpy())
-#         if "id" in batch:
-#             all_ids.extend(batch["id"])
-    
-#     # Create dataframe for analysis
-#     if all_ids:
-#         results_df = pd.DataFrame({
-#             "ID": all_ids,
-#             "true_views": all_targets,
-#             "predicted_views": all_preds
-#         })
-#     else:
-#         results_df = pd.DataFrame({
-#             "true_views": all_targets,
-#             "predicted_views": all_preds
-#         })
-    
-#     # Classify into view classes
-#     results_df['true_class'] = results_df['true_views'].apply(assign_view_class)
-#     results_df['predicted_class'] = results_df['predicted_views'].apply(assign_view_class)
-    
-#     # Compute correct class predictions
-#     results_df['correct'] = results_df['true_class'] == results_df['predicted_class']
-    
-#     # Overall accuracy
-#     overall_accuracy = results_df['correct'].mean() * 100
-#     print(f"\n----- VALIDATION ACCURACY BY CLASS -----")
-#     print(f"Overall Accuracy: {overall_accuracy:.2f}%")
-    
-#     # Class-wise accuracy only
-#     print("\nClass-wise Accuracy:")
-    
-#     for label in labels:
-#         class_df = results_df[results_df['true_class'] == label]
-#         if len(class_df) > 0:
-#             accuracy = class_df['correct'].mean() * 100
-#             print(f"{label}:")
-#             print(f"  - Count: {len(class_df)} samples")
-#             print(f"  - Accuracy: {accuracy:.2f}%")
-    
-#     # Confusion Matrix
-#     print("\nConfusion Matrix (%):")
-#     confusion = pd.crosstab(
-#         results_df['true_class'], 
-#         results_df['predicted_class'],
-#         normalize='index'
-#     ).round(3) * 100
-    
-#     print(confusion)
-#     print(f"\n----- END OF VALIDATION ACCURACY -----")
-    
-#     return results_df
 
 @hydra.main(config_path="configs", config_name="train")
 def train(cfg):
@@ -275,6 +187,13 @@ def train(cfg):
             
             # Save model if validation loss improved
             if epoch_val_loss < best_val_loss:
+                #partie spécifique à dinov2_with_flant5
+                try:
+                    if cfg.model.instance.name == "dinov2_with_flant5":
+                        #afficher les coefficients du model
+                        logger_std.info(f"Vis coef: {model.vis_coef.item()}, Txt coef: {model.txt_coef.item()}")
+                except Exception as e:
+                    logger_std.info(f"No coefficients to display: {e}")
                 best_val_loss = epoch_val_loss
                 logger_std.info(f"New best validation loss: {best_val_loss:.4f}. Saving model to {best_model_path}")
                 torch.save(model.state_dict(), best_model_path)

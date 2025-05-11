@@ -11,25 +11,6 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger_std = logging.getLogger(__name__)
 
-# ----- CSV Processing -----
-def process_youtube_csv(csv_path):
-    df = pd.read_csv(csv_path)
-    view_thresholds = [0, 1000, 10000, 100000, 1000000, float('inf')]
-    labels = ["low", "medium", "high", "viral", "top"]
-    def assign_view_class(views):
-        for i in range(len(view_thresholds) - 1):
-            if view_thresholds[i] <= views < view_thresholds[i+1]:
-                return labels[i]
-        return labels[-1]
-    df['view_classes'] = df['views'].apply(assign_view_class)
-    if 'channel' in df.columns:
-        unique_channels = df['channel'].unique()
-        channel_mapping = {channel: f"channel{i+1}" for i, channel in enumerate(unique_channels)}
-        df['channel_real_name'] = df['channel'].map(channel_mapping)
-    return df
-
-
-
 def train_flant5(train_set, val_set, tokenizer_name, model_name, device, epochs=5, learning_rate=1e-5):
     """
     Entrainement du model de LLM bert tiny
@@ -60,20 +41,43 @@ def train_flant5(train_set, val_set, tokenizer_name, model_name, device, epochs=
         # model.eval()
         correct = 0
         total = 0
+        val_loss = 0
+        n_val = 0
+        all_batch= []
         with torch.no_grad():
             for batch in val_loader:
-                generated_ids = model(batch)
-                preds=model.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+                output=model(batch)
                 # preds: List of strings, ['low', 'high', ...]
-                pred_indices = [class2idx[pred.lower().strip()] for pred in preds]
-                ref_indices = [class2idx[label.lower().strip()] for label in batch['labels']]
-                correct += sum([p==r for p, r in zip(pred_indices, ref_indices)])
-                total += len(pred_indices)
-        val_accuracy = correct / total if total > 0 else 0
-        logger_std.info(f"Validation accuracy: {val_accuracy:.4f}")
+                val_loss += output.loss.item()*len(batch['prompt_resume'])
+                n_val += len(batch['prompt_resume'])
+                # correct += sum([p==r for p, r in zip(pred_indices, ref_indices)])
+                # total += len(pred_indices)
+                all_batch.append(batch)
+        val_loss = val_loss / n_val if n_val > 0 else 0
+        logger_std.info(f"Validation loss: {val_loss:.4f}")
+
+        #affichage des 3 premières predictions
+        last_batch = all_batch[0]
+        prompts=last_batch['prompt_resume'][:3]
+        true_labels=last_batch['label_str'][:3]
+        # Prédiction par génération
+        model.eval()
+        with torch.no_grad():
+            gen_ids = model.text_encoder.generate(
+                **model.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=256).to(device),
+                max_length=10
+            )
+            preds = model.tokenizer.batch_decode(gen_ids, skip_special_tokens=True)
+
+        for i, (prompt, true_label, pred) in enumerate(zip(prompts, true_labels, preds)):
+            print(f"\n----- EXEMPLE {i+1} -----")
+            print("PROMPT:")
+            print(prompt)
+            print(f"GOLD LABEL: {true_label}")
+            print(f"PREDICTED: {pred}")
 
     # Sauvegarde du modèle au format pytorch classique
-    save_name = f"train_{model_name}_{epochs}"
+    save_name = f"train_flant5_{epochs}"
     model.text_encoder.push_to_hub(
     f"{save_name}", 
     exist_ok=True, 
@@ -118,7 +122,3 @@ class MyLLM(nn.Module):
 
 
 
-
-
-
-if __name__ == "__main__":

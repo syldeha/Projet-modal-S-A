@@ -1,11 +1,11 @@
-  instance:
-    _target_: models.dinov2_with_flant5.DinoV2WithFlant5
+instance:
+  _target_: models.dinov2_with_flant5.DinoV2WithFlant5
   frozen: True
-  name: dinov2_with_flant5
-  train_flant5: True
-  model_path: google/flan-t5-small
-  tokenizer_path: google/flan-t5-small
-  # load_model_path: Syldehayem/train_distilbert-base-uncased_30
-epochs: 10
+name: dinov2_with_flant5
+train_flant5: False
+model_path: Syldehayem/train_flant5_30
+tokenizer_path: google/flan-t5-small
+load_model_path: Syldehayem/train_flant5_30
+epochs: 30
 learning_rate: 1e-5
 

@@ -65,7 +65,7 @@ def train_flant5(train_set, val_set, tokenizer_name, model_name, device, epochs=
         with torch.no_grad():
             gen_ids = model.text_encoder.generate(
                 **model.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=256).to(device),
-                max_length=10
+                max_length=64
             )
             preds = model.tokenizer.batch_decode(gen_ids, skip_special_tokens=True)
 

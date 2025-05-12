@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger_std = logging.getLogger(__name__)
 
 class DinoV2WithFlant5(nn.Module):
-    def __init__(self, frozen=False , pretrained_model="google/flan-t5-small", tokenizer_model_path="google/flan-t5-small",vis_coef=1.0,txt_coef=1.0, fusion_dropout=0.1):
+    def __init__(self, frozen=False , pretrained_model="google/flan-t5-small", tokenizer_model_path="google/flan-t5-small",vis_coef=1.0,txt_coef=1.0, fusion_dropout=0.2):
         super().__init__()
         logger_std.info(f"Initialisation du model DinoV2WithFlant5")
         # Vision backbone
@@ -29,8 +29,8 @@ class DinoV2WithFlant5(nn.Module):
                 param.requires_grad = False 
 
         # Fusion coefficients variable
-        self.vis_coef = nn.Parameter(torch.tensor(vis_coef))
-        self.txt_coef = nn.Parameter(torch.tensor(txt_coef))
+        self.vis_coef = vis_coef
+        self.txt_coef = txt_coef
 
         # Harmonisation des dims (projection si besoin)
         fusion_dim = max(self.vision_dim, self.text_dim)
@@ -44,9 +44,11 @@ class DinoV2WithFlant5(nn.Module):
             self.txt_proj = nn.Identity()
         #**Fusion complète par concaténation, puis projection**
         self.fusion_proj = nn.Linear(2*fusion_dim, fusion_dim)
+        self.proj_2 = nn.Linear(2*fusion_dim, 256)
 
         # Normalisation
-        self.norm = nn.LayerNorm(fusion_dim)
+        self.norm = nn.BatchNorm1d(fusion_dim)
+        self.last_layer = nn.Linear(256, 1)
 
 
         # Tête de régression finale (ou classification selon tes besoins)
@@ -55,12 +57,10 @@ class DinoV2WithFlant5(nn.Module):
             nn.BatchNorm1d(256),
             nn.GELU(),
             nn.Dropout(fusion_dropout),
-            nn.Linear(256, 128),
+            nn.Linear(256, 256),
             # nn.BatchNorm1d(256),
             nn.GELU(),
             nn.Dropout(fusion_dropout),
-            nn.Linear(128, 1),
-            nn.ReLU(),
         )
 
     def forward(self, x):
@@ -90,15 +90,18 @@ class DinoV2WithFlant5(nn.Module):
         t_feat = self.txt_proj(t_feat)       # [batch, fusion_dim]
 
         # -FUSION par concat + projection
-        # z = torch.cat([self.vis_coef * v_feat, self.txt_coef * t_feat], dim=1)  # (Batch, 2*fusion_dim)
-        z=self.vis_coef * v_feat+self.txt_coef * t_feat
-        z = self.fusion_proj(z)   # (Batch, fusion_dim)
+        z = torch.cat([self.vis_coef * v_feat, self.txt_coef * t_feat], dim=1)  # (Batch, 2*fusion_dim)
+        # z=self.vis_coef * v_feat+self.txt_coef * t_feat
+        z_1 = self.fusion_proj(z)   # (Batch, fusion_dim)
+        # z_2 = self.proj_2(z)       # (Batch, 256)
         #normalisation
-        z = self.norm(z)
+        # z_1 = self.norm(z_1)       # (Batch, fusion_dim)
 
         # 4. Régression
-        out = self.regression_head(z)
-
+        z_1 = self.regression_head(z_1)    # (Batch, 256)
+        #couche residuelle entre z_1 et z_2
+        # out = z_1+z_2   # (Batch, 256)
+        out = self.last_layer(z_1)        # (Batch, 1)
         return out
 
     def load_checkpoint(self, checkpoint_path, device=torch.device("cuda" if torch.cuda.is_available() else "cpu"), load_full=True):

@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger_std = logging.getLogger(__name__)
 
 class DinoV2WithBert(nn.Module):
-    def __init__(self, frozen=False , pretrained_model="distilbert-base-uncased", tokenizer_model_path="distilbert-base-uncased",vis_coef=1.0,txt_coef=1.0, fusion_dropout=0.2):
+    def __init__(self, frozen=False , pretrained_model="roberta-base", tokenizer_model_path="roberta-base",vis_coef=1.0,txt_coef=1.0, fusion_dropout=0.2):
         super().__init__()
         logger_std.info(f"Initialisation du model DinoV2WithBert")
         # Vision backbone
@@ -52,13 +52,13 @@ class DinoV2WithBert(nn.Module):
         # Tête de régression finale (ou classification selon tes besoins)
         self.regression_head = nn.Sequential(
             nn.Linear(fusion_dim, 256),
+            nn.GELU(),
+            nn.Linear(256, 256),
             nn.BatchNorm1d(256),
             nn.GELU(),
-            nn.Dropout(fusion_dropout),
-            nn.Linear(256, 256),
+            # nn.Linear(256, 256),
             # nn.BatchNorm1d(256),
-            nn.GELU(),
-            nn.Dropout(fusion_dropout),
+            # nn.GELU(),
             nn.Linear(256, 1),
             nn.ReLU(),
         )

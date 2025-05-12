@@ -3,7 +3,7 @@ instance:
   frozen: True
 name: dinov2_with_bert
 train_bert_tiny: True
-model_path: distilbert-base-uncased
-tokenizer_path: distilbert-base-uncased
-# load_model_path: Syldehayem/train_distilbert-base-uncased_30
-epochs: 100
+model_path: elihoole/roberta-base
+tokenizer_path: elihoole/roberta-base
+# load_model_path: Syldehayem/train_distilbert-base-uncased_100
+epochs: 10

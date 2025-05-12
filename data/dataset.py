@@ -53,21 +53,31 @@ def make_prompt(entry):
     """
     entry: dict or pd.Series with keys: 'title', 'channel_real_name', 'year', 'description'
     """
-    title = entry['title']
-    channel = entry['channel_real_name']
-    date = entry['year']
+    instruction="""
+    pay attention to : 
+    - the upload age of the video : 
+    - the Language reach : 
+    -Keyword-heavy : 
+    -Celebrity/franchise hook:
+    -video type:
+    only choose one of theses categories:
+    -low(0-1000)
+    -medium(1000-10000)
+    -high(10000-100000)
+    -viral(100000-1000000)
+    -top(1000000+) and don't add any other text. just provide your choice.
+    """
+    fields = [
+        f"Title: {entry['title']}",
+        f"Channel: {entry['channel_real_name']}",
+        f"Year: {entry['year']}",
+    ]
     desc_clean = clean_description(entry['description'])
-    
-    choices = "low, medium, high, viral, top"
-    instruction = f"""Given the following YouTube video metadata, classify its view category. Choices: {choices}
-
-Title: {title}
-Channel: {channel}
-Date: {date}"""
     if desc_clean:
-        instruction += f"\nDescription: {desc_clean}"
-    instruction += "\n\nCategory:"
-    return instruction
+        fields.append(f"Description: {desc_clean}")
+    
+    prompt = "\n".join(fields)+"base on this information, can you predict the number of views of this video in terms of classes: low(0-1000), medium(1000-10000), high(10000-100000), viral(100000-1000000), top(1000000+)"+instruction
+    return prompt
 def process_youtube_csv(csv_path):
     """
     Fonction qui permet de modifier le fichier csv pour ajouter des colonnes , (view_classes, channel_real_name)

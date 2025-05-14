@@ -74,9 +74,9 @@ def train(cfg):
             _,bert_tiny_train_name = train_bert_tiny(train_set, val_set, tokenizer_name=cfg.model.tokenizer_path, model_name=cfg.model.model_path, epochs=cfg.model.epochs, device=device)
             #chargement du model bert tiny
             model.load_model(bert_tiny_train_name) #permet de charger uniquement les paramètres du model bert tinyentrainé 
-        # else:
-        #     if cfg.model.load_model_path:
-        #         model.load_model(cfg.model.load_model_path)
+        else:
+            if cfg.model.load_model_path:
+                model.load_model(cfg.model.load_model_path)
     except Exception as e:
         logger_std.info(f"No training of bert tiny: {e}")
     #check for the training of flant5
@@ -123,6 +123,7 @@ def train(cfg):
         num_samples_train = 0
         pbar = tqdm(train_loader, desc=f"Epoch {epoch}", leave=False)
         for i, batch in enumerate(pbar):
+            torch.cuda.empty_cache()
             batch["image"] = batch["image"].to(device)
             batch["target"] = batch["target"].to(device).squeeze()
             preds = model(batch).squeeze()

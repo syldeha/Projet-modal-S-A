@@ -1,9 +1,9 @@
 instance: 
-  _target_: models.dinov2_with_bert.DinoV2WithBert
+  _target_: models.dinov2_with_bert.DinoV2WithBertLoRA
   frozen: True
 name: dinov2_with_bert
-train_bert_tiny: True
-model_path: elihoole/roberta-base
-tokenizer_path: elihoole/roberta-base
+train_bert_tiny: False
+model_path: distilbert-base-uncased
+tokenizer_path: distilbert-base-uncased
 # load_model_path: Syldehayem/train_distilbert-base-uncased_100
 epochs: 10

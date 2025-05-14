@@ -76,7 +76,7 @@ def make_prompt(entry):
     if desc_clean:
         fields.append(f"Description: {desc_clean}")
     
-    prompt = "\n".join(fields)+"base on this information, can you predict the number of views of this video in terms of classes: low(0-1000), medium(1000-10000), high(10000-100000), viral(100000-1000000), top(1000000+)"+instruction
+    prompt = "\n".join(fields)+"Predict the number of views of this video in terms of classes: low(0-1000), medium(1000-10000), high(10000-100000), viral(100000-1000000), top(1000000+)"
     return prompt
 def process_youtube_csv(csv_path):
     """

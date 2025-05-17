@@ -4,6 +4,7 @@ import hydra
 from tqdm import tqdm
 import logging
 import os
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 import pandas as pd
 import numpy as np
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -140,7 +141,7 @@ def train(cfg):
                 if logger is not None
                 else None
             )
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
             epoch_train_loss += loss.detach().cpu().numpy() * len(batch["image"])
@@ -213,6 +214,9 @@ def train(cfg):
                 if logger is not None
                 else None
             )
+        elif epoch % 5 == 0:
+            logger_std.info("save model checkpoint")
+            torch.save(model.state_dict(), f"{checkpoint_path}_epoch.pt")
 
     logger_std.info(
         f"""Epoch {epoch}: 

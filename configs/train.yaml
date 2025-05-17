@@ -5,9 +5,9 @@ defaults:
     - model: dinov2_bert
     - loss_fn: msle
 
-epochs: 10
+epochs: 15
 log: True
-prefix: ""
+prefix: "Resnet50_trainBackbone"
 experiment_name: ${prefix}${model.name}_${now:%Y-%m-%d_%H-%M-%S}
 
 # Enable this flag for second phase training to reduce "Solid Performers" sampling by half
@@ -29,8 +29,7 @@ datamodule:
 
 data_dir: ${root_dir}/dataset/
 root_dir: ${hydra:runtime.cwd}
-checkpoint_path: ${root_dir}/checkpoints/${experiment_name}_dinov2_bert_prompt_resume_finetuneLORA_.pt
-checkpoint_to_load: ${root_dir}/checkpoints/dinov2_with_bert_2025-05-13_17-28-29_dinov2_bert_prompt_resume_finetuneLORA_best.pt
-
+checkpoint_path: ${root_dir}/checkpoints/${experiment_name}_dinov2_distillbert_lora_only.pt
+# checkpoint_to_load: ${root_dir}/checkpoints/Train_Qformers_Only_Vit_small_trainBackbonedinov2_with_bert_2025-05-17_11-14-12_dinov2_distillbert_lora_only_best.pt
 
 

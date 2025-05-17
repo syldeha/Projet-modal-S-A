@@ -1,6 +1,10 @@
-instance: 
-  _target_: models.dinov2_with_bert.DinoV2WithBertLoRA
+instance:
+  _target_: models.dinov2_with_bert.Resnet50WithBertLoRA
   frozen: True
+  q_former: False
+  # pretrained_model_checkpoint: ${hydra:runtime.cwd}/checkpoints/Train_backbone_Onlydinov2_with_bert_2025-05-17_02-19-10_dinov2_distillbert_lora_only_best_dinov_small_4_71.pt
+  frozen_backbone: False
+
 name: dinov2_with_bert
 train_bert_tiny: False
 model_path: distilbert-base-uncased

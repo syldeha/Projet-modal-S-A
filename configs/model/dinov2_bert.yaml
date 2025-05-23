@@ -1,13 +1,13 @@
 instance:
-  _target_: models.dinov2_with_bert.Resnet50WithBertLoRA
+  _target_: models.dinov2_with_bert.DinoV2WithBertLoRA
   frozen: True
-  q_former: False
-  # pretrained_model_checkpoint: ${hydra:runtime.cwd}/checkpoints/Train_backbone_Onlydinov2_with_bert_2025-05-17_02-19-10_dinov2_distillbert_lora_only_best_dinov_small_4_71.pt
-  frozen_backbone: False
+  q_former: True
+  # pretrained_model_checkpoint: ${hydra:runtime.cwd}/checkpoints/Resnet50_trainBackbonedinov2_with_bert_2025-05-17_14-58-48_dinov2_distillbert_lora_only_best.pt
+  frozen_backbone: True
 
-name: dinov2_with_bert
-train_bert_tiny: False
-model_path: distilbert-base-uncased
-tokenizer_path: distilbert-base-uncased
-# load_model_path: Syldehayem/train_distilbert-base-uncased_100
-epochs: 10
+name: dinov2_bert
+train_bert_tiny: True
+model_path: bert-base-uncased
+tokenizer_path: bert-base-uncased
+# load_model_path: Syldehayem/train_bert-base-uncased_100
+epochs: 20

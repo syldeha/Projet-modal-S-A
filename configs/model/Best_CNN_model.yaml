@@ -1,0 +1,32 @@
+instance: 
+  _target_: models.Best_CNN_model.CNN_with_bert
+  input_channels: 3
+  n_layers: 4
+  initial_num_filters: 16
+  filter_increase: 1
+  kernel_sizes: 3
+  dropout_p: 0.1
+  regression_hidden_vision: 128
+  regression_hidden2_vision: 128
+  input_image_size: 224
+  paddings : 2
+  strides : 1
+  pool_every : 3
+  use_batchnorm : False
+  use_dropout : True
+  use_maxpool : False
+  load_backbone_checkpoint: /users/eleves-b/2023/sylvain.dehayem-kenfouo/projet_final_modal/checkpoints/CNN_backbone_4_17_val_4_31_.pt
+  use_lora: True
+  lora_r: 16
+  lora_alpha: 8
+  lora_dropout: 0.2
+  use_concatenation: False
+  vision_coef: 0.5
+  text: "title"
+  token_classification: False
+  pretrained_model: "bert-base-uncased"
+  tokenizer_model_path: "bert-base-uncased"
+  frozen_backbone: True
+  regression_hidden_head: 128
+  regression_hidden2_head: 128
+name: Best_CNN_model

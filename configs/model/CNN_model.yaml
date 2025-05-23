@@ -1,0 +1,8 @@
+instance: 
+  _target_: models.CNN_model.DynamicCNNRegressor
+  input_channels: 3
+  n_layers: 4
+  initial_num_filters: 16
+  filter_increase: 2
+  kernel_sizes: [3, 3, 5, 3]
+name: CNN_model

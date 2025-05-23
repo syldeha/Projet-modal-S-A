@@ -17,7 +17,7 @@ class SimpleQFormerBlock(nn.Module):
     def __init__(self, query_dim, img_feature_dim, num_heads):
         super().__init__()
         self.cross_attn = nn.MultiheadAttention(embed_dim=query_dim, kdim=img_feature_dim, vdim=img_feature_dim, num_heads=num_heads, batch_first=True)
-        hidden_dim = 2*query_dim
+        hidden_dim = query_dim
         self.ffn = nn.Sequential(
             nn.Linear(query_dim, hidden_dim),
             nn.GELU(),
@@ -61,25 +61,27 @@ class DinoV2WithBertLora_Backbone(nn.Module):
     def __init__(
         self, 
         frozen=False,
-        pretrained_model="distilbert-base-uncased", 
-        tokenizer_model_path="distilbert-base-uncased", 
+        pretrained_model="bert-base-uncased", 
+        tokenizer_model_path="bert-base-uncased", 
         vis_coef=1.0, 
         txt_coef=1.0, 
-        fusion_dropout=0.2,
+        fusion_dropout=0.5,
         lora_vis=True,         # LoRA sur vision backbone
         lora_txt=True,         # LoRA sur texte backbone
-        lora_r=16,
-        lora_alpha=32,
-        lora_dropout=0.05
+        lora_r=8,
+        lora_alpha=16,
+        lora_dropout=0.1
     ):
         super().__init__()
         logger_std.info(f"Initialisation du model DinoV2WithBertLoRA")
 
 
         # ---- Vision backbone ----
-        self.backbone = timm.create_model('vit_base_patch16_224', pretrained=True)
-        self.backbone.head = nn.Identity()
-        self.vision_dim = self.backbone.norm.normalized_shape[0]
+        self.backbone = timm.create_model("vit_base_patch16_clip_224", pretrained=True)
+        # self.backbone = timm.create_model("vit_large_patch14_reg4_dinov2", pretrained=True)
+        self.vision_dim = self.backbone.num_features  # 768 pour ViT-Base CLIP
+        # self.backbone.head = nn.Identity()
+        # self.vision_dim = self.backbone.norm.normalized_shape[0]
         
         if lora_vis:
             logger_std.info("Applying LoRA to vision backbone...")
@@ -92,7 +94,7 @@ class DinoV2WithBertLora_Backbone(nn.Module):
         elif frozen:
             for param in self.backbone.parameters():
                 param.requires_grad = False
-
+#batchnorm
         # ---- Text backbone ----
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_path)
         self.text_encoder = AutoModel.from_pretrained(pretrained_model)
@@ -103,7 +105,7 @@ class DinoV2WithBertLora_Backbone(nn.Module):
             # For BERT-like: target_modules are ['query', 'value']
             txt_lora_config = LoraConfig(
                 r=lora_r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, bias="none",
-                target_modules=["q_lin", "v_lin"]
+                target_modules=["query", "key", "value"]
             )
             self.text_encoder = get_peft_model(self.text_encoder, txt_lora_config)
             self.text_encoder.print_trainable_parameters()
@@ -129,36 +131,38 @@ class DinoV2WithBertLora_Backbone(nn.Module):
         # Fusion complète par concaténation, puis projection
         self.fusion_proj = nn.Linear(2*fusion_dim, fusion_dim)
 
-        # Normalisation
-        self.norm = nn.LayerNorm(fusion_dim)
 
     def forward(self, x):
         # x["image"]: image tensor (B,C,H,W)
         # x["prompt_resume"]: list[str] size = batch_size
 
         # 1. Encode image
-        v_feat = self.backbone.forward_features(x["image"]) # [batch, n_patches+1, self.vision_dim]
-        #moyennage des features de l'image
-        v_feat_pooled = v_feat.mean(dim=1) #[batch, self.vision_dim]
+        v_feat = self.backbone.forward_features(x["image"] ) # [batch, n_patches+1, self.vision_dim]
+        #token de cls
+        v_feat_init = v_feat[:,0,:] #[batch, self.vision_dim]
+        v_feat = self.vis_proj(v_feat_init) # [batch, self.fusion_dim]
 
         # 2. Encode text
-        device = v_feat_pooled.device
+        device = v_feat.device
         encoded = self.tokenizer(
             x["prompt_resume"], padding=True, truncation=True, return_tensors='pt'
         )
+        # Move all encoded inputs to the same device as image features
         encoded = {k: v.to(device) for k, v in encoded.items()}
         out = self.text_encoder(**encoded)
         input_mask_expanded = encoded["attention_mask"].unsqueeze(-1).expand(out.last_hidden_state.size()).float()
         sum_embeddings = torch.sum(out.last_hidden_state * input_mask_expanded, 1)
         sum_mask = input_mask_expanded.sum(1)
         t_feat = sum_embeddings / sum_mask.clamp(min=1e-9) # [batch, self.text_dim]
+
+        #Token de CLS 
+        # t_feat = out.last_hidden_state[:,0,:] # [batch, self.text_dim]
         t_feat = self.txt_proj(t_feat) # [batch, self.fusion_dim]
 
-        # Fusion par concaténation + projection
-        z = torch.cat([self.vis_coef * v_feat_pooled, self.txt_coef * t_feat], dim=1) # [batch, 2*self.fusion_dim]
-        z = self.fusion_proj(z) # [batch, self.fusion_dim]
-        z = self.norm(z)
-        return z , v_feat , t_feat
+        # Fusion addition
+        z = self.vis_coef * v_feat + self.txt_coef * t_feat # [batch, self.fusion_dim]
+        # z = self.norm(z)  # à retirer lors du lancement des autres modeles
+        return z , v_feat_init , t_feat
 
     def load_checkpoint_only_lora_backbone(self, checkpoint_path, device=torch.device("cuda" if torch.cuda.is_available() else "cpu"), load_full=True):
         if os.path.exists(checkpoint_path):
@@ -179,17 +183,149 @@ class DinoV2WithBertLora_Backbone(nn.Module):
             print(f"Checkpoint file {checkpoint_path} not found.")
             return False
 
+#MISE EN PLACE DE DINOV TORCH.HUB
+
+# class RealDinoV2WithBertLora_Backbone(nn.Module):
+#     def __init__(
+#         self, 
+#         frozen=False,
+#         pretrained_model="distilbert-base-uncased", 
+#         tokenizer_model_path="distilbert-base-uncased", 
+#         vis_coef=1.0, 
+#         txt_coef=1.0, 
+#         fusion_dropout=0.2,
+#         lora_vis=True,         # LoRA sur vision backbone
+#         lora_txt=True,         # LoRA sur texte backbone
+#         lora_r=16,
+#         lora_alpha=32,
+#         lora_dropout=0.05
+#     ):
+#         super().__init__()
+#         logger_std.info(f"Initialisation du model DinoV2WithBertLoRA")
+
+
+#         # ---- Vision backbone ----
+#         self.backbone = timm.create_model("vit_base_patch16_clip_224", pretrained=True)
+#         # self.backbone = timm.create_model("vit_large_patch14_reg4_dinov2", pretrained=True)
+#         self.backbone = torch.hub.load("facebookresearch/dinov2", "dinov2_vitb14_reg")
+#         self.backbone.head = nn.Identity()        
+#         self.vision_dim = self.backbone.norm.normalized_shape[0]
+
+#         if lora_vis:
+#             logger_std.info("Applying LoRA to vision backbone...")
+#             vis_lora_config = LoraConfig(
+#                 r=lora_r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, bias="none",
+#                 target_modules=["qkv", "proj"]  
+#             )
+#             self.backbone = get_peft_model(self.backbone, vis_lora_config)
+#             self.backbone.print_trainable_parameters()
+#         elif frozen:
+#             for param in self.backbone.parameters():
+#                 param.requires_grad = False
+
+#         # ---- Text backbone ----
+#         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_path)
+#         self.text_encoder = AutoModel.from_pretrained(pretrained_model)
+#         self.text_dim = self.text_encoder.config.hidden_size
+        
+#         if lora_txt:
+#             logger_std.info("Applying LoRA to text backbone...")
+#             # For BERT-like: target_modules are ['query', 'value']
+#             txt_lora_config = LoraConfig(
+#                 r=lora_r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, bias="none",
+#                 target_modules=["q_lin", "v_lin"]
+#             )
+#             self.text_encoder = get_peft_model(self.text_encoder, txt_lora_config)
+#             self.text_encoder.print_trainable_parameters()
+#         elif frozen:
+#             for param in self.text_encoder.parameters():
+#                 param.requires_grad = False
+
+#         # Fusion coefficients
+#         self.vis_coef = vis_coef
+#         self.txt_coef = txt_coef
+
+#         # Harmonisation des dims (projection si besoin)
+#         fusion_dim = max(self.text_dim , self.vision_dim)
+#         self.fusion_dim = fusion_dim
+#         if self.vision_dim != fusion_dim:
+#             self.vis_proj = nn.Linear(self.vision_dim, fusion_dim)
+#         else:
+#             self.vis_proj = nn.Identity()
+#         if self.text_dim != fusion_dim:
+#             self.txt_proj = nn.Linear(self.text_dim, fusion_dim)
+#         else:
+#             self.txt_proj = nn.Identity()
+#         # Fusion complète par concaténation, puis projection
+#         self.fusion_proj = nn.Linear(2*fusion_dim, fusion_dim)
+
+#         # Normalisation
+#         self.norm = nn.BatchNorm1d(fusion_dim)
+
+#     def forward(self, x):
+#         # x["image"]: image tensor (B,C,H,W)
+#         # x["prompt_resume"]: list[str] size = batch_size
+
+#         # 1. Encode image
+#         v_feat = self.backbone.forward_features(x["image"] ) # [batch, n_patches+1, self.vision_dim]
+#         #token de cls
+#         v_feat_init = v_feat[:,0,:] #[batch, self.vision_dim]
+#         v_feat = self.vis_proj(v_feat_init) # [batch, self.fusion_dim]
+
+#         # 2. Encode text
+#         device = v_feat.device
+#         encoded = self.tokenizer(
+#             x["title"], padding=True, truncation=True, return_tensors='pt'
+#         )
+#         encoded = {k: v.to(device) for k, v in encoded.items()}
+#         out = self.text_encoder(**encoded)
+#         input_mask_expanded = encoded["attention_mask"].unsqueeze(-1).expand(out.last_hidden_state.size()).float()
+#         sum_embeddings = torch.sum(out.last_hidden_state * input_mask_expanded, 1)
+#         sum_mask = input_mask_expanded.sum(1)
+#         t_feat = sum_embeddings / sum_mask.clamp(min=1e-9) # [batch, self.text_dim]
+
+#         #Token de CLS 
+#         # t_feat = out.last_hidden_state[:,0,:] # [batch, self.text_dim]
+#         t_feat = self.txt_proj(t_feat) # [batch, self.fusion_dim]
+
+#         # Fusion addition
+#         z = self.vis_coef * v_feat + self.txt_coef * t_feat # [batch, self.fusion_dim]
+#         # z = self.norm(z)  # à retirer lors du lancement des autres modeles
+#         return z , v_feat_init , t_feat
+
+#     def load_checkpoint_only_lora_backbone(self, checkpoint_path, device=torch.device("cuda" if torch.cuda.is_available() else "cpu"), load_full=True):
+#         if os.path.exists(checkpoint_path):
+#             checkpoint = torch.load(checkpoint_path, map_location=device)
+#             if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+#                 model_state_dict = checkpoint['model_state_dict']
+#             else:
+#                 model_state_dict = checkpoint
+
+#             if load_full:
+#                 # --- AJOUT : remapping si besoin
+#                 # model_state_dict = remap_text_encoder_keys(model_state_dict)
+#                 # # ---
+#                 missing_keys, unexpected_keys = self.load_state_dict(model_state_dict, strict=False)
+#                 print(f"Loaded full model from {checkpoint_path}")
+#             return True
+#         else:
+#             print(f"Checkpoint file {checkpoint_path} not found.")
+#             return False
+
 
 class DinoV2WithBertLoRA(nn.Module):
     def __init__(
         self, 
         frozen=False,
-        pretrained_model="distilbert-base-uncased", 
-        tokenizer_model_path="distilbert-base-uncased", 
+        pretrained_model="bert-base-uncased", 
+        tokenizer_model_path="bert-base-uncased", 
         vis_coef=1.0, 
         txt_coef=1.0, 
-        q_former=False,
+        lora_vis=True,
+        lora_txt=True,
+        q_former=True,
         pretrained_model_checkpoint=None,
+        checkpoint_to_load=None,
         frozen_backbone=True,
     ):
         super().__init__()
@@ -203,6 +339,8 @@ class DinoV2WithBertLoRA(nn.Module):
             tokenizer_model_path=tokenizer_model_path,
             vis_coef=vis_coef,
             txt_coef=txt_coef,
+            lora_vis=lora_vis,
+            lora_txt=lora_txt,
         )
         self.frozen_backbone = frozen_backbone
         if self.frozen_backbone:
@@ -210,37 +348,42 @@ class DinoV2WithBertLoRA(nn.Module):
                 param.requires_grad = False
         self.fusion_dim = self.backbone.fusion_dim
         self.vision_dim = self.backbone.vision_dim
-        self.q_former = q_former
-        if self.q_former:
+        self.vis_coef = self.backbone.vis_coef
+        self.txt_coef = self.backbone.txt_coef
+        self.fusion_proj = nn.Linear(2*self.fusion_dim, self.fusion_dim)
+        self.q_former_bool = q_former
+        if self.q_former_bool:
             logger_std.info("Applying Q-Former...")
             self.qformer = SimpleQFormer(
                 query_dim=self.fusion_dim,
                 img_feature_dim=self.vision_dim,
-                num_heads=16,
-                num_layers=5,
-                num_queries=16
+                num_heads=8,
+                num_layers=2,
+                num_queries=8
             )
+            
 
         # Tête de régression finale (ou classification selon tes besoins)
-
-        # self.regression_head = nn.Sequential(
-        #     nn.Linear(self.fusion_dim , 512),  # 
-        #     nn.GELU(),
-        #     nn.Dropout(0.3),
-        #     nn.Linear(512, 1),
-        #     nn.ReLU(),
-        # )
+        #regresssion head
         self.regression_head = nn.Sequential(
-            nn.Linear(self.fusion_dim, 256),
+            nn.Linear(self.fusion_dim, 128),
+            nn.Dropout(0.2),
+            nn.BatchNorm1d(128),
             nn.GELU(),
-            nn.Linear(256, 256),
-            nn.BatchNorm1d(256),
-            nn.GELU(),
-            nn.Linear(256, 1)
+            nn.Linear(128, 1),
+            nn.ReLU()
+
         )
-        if pretrained_model_checkpoint:
-            logger_std.info(f"Chargement du model {pretrained_model_checkpoint} sur le model DinoV2WithBert ")
-            self.load_model_backbone(pretrained_model_checkpoint)
+        for m in self.regression_head:
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+  
+        # if pretrained_model_checkpoint:
+        #     logger_std.info(f"Chargement du model {pretrained_model_checkpoint} sur le model DinoV2WithBert ")
+        #     self.load_model_backbone(pretrained_model_checkpoint)
+        #methode d'initialisation des couches lineaires xavier
 
 
     def forward(self, x):
@@ -248,16 +391,26 @@ class DinoV2WithBertLoRA(nn.Module):
         # x["prompt_resume"]: list[str] size = batch_size
 
         # 1. Encode image
-        z , v_feat , t_feat = self.backbone(x) # [batch, self.fusion_dim], [batch, n_patches+1, self.vision_dim], [batch, self.fusion_dim]
-        if self.q_former:
+        z_backbone , v_feat_init , t_feat = self.backbone(x) # [batch, self.fusion_dim], [batch, self.vision_dim], [batch, self.fusion_dim]
+        v_feat_init = v_feat_init.unsqueeze(1) # [batch, 1, self.vision_dim]
+        if self.q_former_bool:
+            # print("Q-Former is used")
             #utilisation des features de l'image pour le Q-Former
-            v_feat = self.qformer(v_feat) # [batch, n_queries, self.fusion_dim]
+            v_feat = self.qformer(v_feat_init) # [batch, n_queries, self.fusion_dim]
             #moyennage des features du Q-Former
-            z = v_feat.mean(dim=1) # [batch, self.fusion_dim]
-            z = self.regression_head(z) # [batch, 1]
-            return z
+            z_qformer = v_feat.mean(dim=1) # [batch, self.fusion_dim]
+            #addition avec le texte
+            # z = self.vis_coef * z + self.txt_coef * t_feat # [batch, self.fusion_dim]
+            #concatenation
+            z_concat = torch.cat([z_qformer, t_feat], dim=1) # [batch, 2*self.fusion_dim]
+            z_proj = self.fusion_proj(z_concat) # [batch, self.fusion_dim]
+
+            z_final = self.regression_head(z_proj) # [batch, 1]
+            # print(z_final)
+            return z_final
         else :
-            out = self.regression_head(z) # [batch, 1]
+            out = self.regression_head(z_backbone) # [batch, 1]
+            # print("out")
             return out
 
     def load_model_backbone(self, pretrained_model_checkpoint):
@@ -304,8 +457,8 @@ class Resnet50WithBertLora_Backbone(nn.Module):
     def __init__(
         self, 
         frozen=False,
-        pretrained_model="distilbert-base-uncased", 
-        tokenizer_model_path="distilbert-base-uncased", 
+        pretrained_model="bert-base-uncased", 
+        tokenizer_model_path="bert-base-uncased", 
         vis_coef=1.0, 
         txt_coef=1.0, 
         fusion_dropout=0.2,
@@ -336,25 +489,20 @@ class Resnet50WithBertLora_Backbone(nn.Module):
         self.text_encoder = AutoModel.from_pretrained(pretrained_model)
         self.text_dim = self.text_encoder.config.hidden_size
         
-        if lora_txt:
-            logger_std.info("Applying LoRA to text backbone...")
-            # For BERT-like: target_modules are ['query', 'value']
-            txt_lora_config = LoraConfig(
-                r=lora_r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, bias="none",
-                target_modules=["q_lin", "v_lin"]
-            )
-            self.text_encoder = get_peft_model(self.text_encoder, txt_lora_config)
-            self.text_encoder.print_trainable_parameters()
-        elif frozen:
-            for param in self.text_encoder.parameters():
-                param.requires_grad = False
-
+        logger_std.info("Applying LoRA to text backbone...")
+        # For BERT-like: target_modules are ['query', 'value']
+        txt_lora_config = LoraConfig(
+            r=lora_r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, bias="none",
+            target_modules=["query", "key", "value"]
+        )
+        self.text_encoder = get_peft_model(self.text_encoder, txt_lora_config)
+        self.text_encoder.print_trainable_parameters()
         # Fusion coefficients
         self.vis_coef = vis_coef
         self.txt_coef = txt_coef
 
         # Harmonisation des dims (projection si besoin)
-        fusion_dim = min(self.text_dim , self.vision_dim)
+        fusion_dim = max(self.text_dim , self.vision_dim)
         self.fusion_dim = fusion_dim
         if self.vision_dim != fusion_dim:
             self.vis_proj = nn.Linear(self.vision_dim, fusion_dim)
@@ -366,9 +514,6 @@ class Resnet50WithBertLora_Backbone(nn.Module):
             self.txt_proj = nn.Identity()
         # Fusion complète par concaténation, puis projection
         self.fusion_proj = nn.Linear(2*fusion_dim, fusion_dim)
-
-        # Normalisation
-        self.norm = nn.LayerNorm(fusion_dim)
 
     def forward(self, x):
         # x["image"]: image tensor (B,C,H,W)
@@ -383,7 +528,7 @@ class Resnet50WithBertLora_Backbone(nn.Module):
         # 2. Encode text
         device = v_feat.device
         encoded = self.tokenizer(
-            x["prompt_resume"], padding=True, truncation=True, return_tensors='pt'
+            x["title"], padding=True, truncation=True, return_tensors='pt'
         )
         encoded = {k: v.to(device) for k, v in encoded.items()}
         out = self.text_encoder(**encoded)
@@ -394,9 +539,8 @@ class Resnet50WithBertLora_Backbone(nn.Module):
         t_feat = self.txt_proj(t_feat) # [batch, self.fusion_dim]
 
         # Fusion par concaténation + projection
-        z = torch.cat([self.vis_coef * v_feat, self.txt_coef * t_feat], dim=1) # [batch, 2*self.fusion_dim]
+        z = torch.cat([v_feat, t_feat], dim=1) # [batch, 2*self.fusion_dim]
         z = self.fusion_proj(z) # [batch, self.fusion_dim]
-        z = self.norm(z)
         return z , v_feat , t_feat
 
     def load_checkpoint_only_lora_backbone(self, checkpoint_path, device=torch.device("cuda" if torch.cuda.is_available() else "cpu"), load_full=True):
@@ -423,8 +567,8 @@ class Resnet50WithBertLoRA(nn.Module):
     def __init__(
         self, 
         frozen=False,
-        pretrained_model="distilbert-base-uncased", 
-        tokenizer_model_path="distilbert-base-uncased", 
+        pretrained_model="bert-base-uncased", 
+        tokenizer_model_path="bert-base-uncased", 
         vis_coef=1.0, 
         txt_coef=1.0, 
         q_former=False,
@@ -455,20 +599,28 @@ class Resnet50WithBertLoRA(nn.Module):
             self.qformer = SimpleQFormer(
                 query_dim=self.fusion_dim,
                 img_feature_dim=self.vision_dim,
-                num_heads=16,
-                num_layers=5,
-                num_queries=16
+                num_heads=8,
+                num_layers=2,
+                num_queries=8
             )
 
         # Tête de régression finale (ou classification selon tes besoins)
         self.regression_head = nn.Sequential(
             nn.Linear(self.fusion_dim, 256),
+            nn.Dropout(0.5),
             nn.GELU(),
             nn.Linear(256, 256),
-            nn.BatchNorm1d(256),
+            nn.Dropout(0.5),
             nn.GELU(),
-            nn.Linear(256, 1)
+            nn.Linear(256,1),
+
         )
+        #initialisation des couches lineaires xavier
+        for m in self.regression_head:
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
         if pretrained_model_checkpoint:
             logger_std.info(f"Chargement du model {pretrained_model_checkpoint} sur le model Resnet50WithBert ")
             self.load_model_backbone(pretrained_model_checkpoint)

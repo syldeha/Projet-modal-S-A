@@ -13,6 +13,12 @@ experiment_name: ${prefix}${model.name}_${now:%Y-%m-%d_%H-%M-%S}
 # Enable this flag for second phase training to reduce "Solid Performers" sampling by half
 use_balanced_sampler: False
 
+
+# Define data paths
+data_dir: "./dataset"
+root_dir: ${hydra:runtime.cwd}
+
+
 hydra:
   output_subdir: null
   run:
@@ -26,8 +32,3 @@ datamodule:
   batch_size: ${dataset.batch_size}
   num_workers: ${dataset.num_workers}
   metadata: ${dataset.metadata}
-
-data_dir: ${root_dir}/dataset/
-root_dir: ${hydra:runtime.cwd}
-checkpoint_path: ${root_dir}/checkpoints/${experiment_name}_efficientnet_advanced_with_distilbert.pt
-checkpoint_to_load: ${root_dir}/checkpoints/efficientnet_advanceddinov2_advanced_2025-05-23_11-17-59_efficientnet_advanced_with_distilbert_best.pt

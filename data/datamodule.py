@@ -26,7 +26,7 @@ class DataModule:
             self.dataset_path,
             self.train_transform,
             self.metadata,
-            val_year_min=2024
+            val_year_min=2023
         )
 
     def train_dataloader(self):

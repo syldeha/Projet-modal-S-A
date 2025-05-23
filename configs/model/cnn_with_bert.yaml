@@ -1,0 +1,16 @@
+instance: 
+  _target_: models.CNN_with_bert.DynamicCNNRegressor
+  input_channels: 3
+  n_layers: 4
+  initial_num_filters: 16
+  filter_increase: 2
+  kernel_sizes: [3, 3, 5, 3]
+  pretrained_model: "bert-base-uncased"
+  tokenizer_model_path: "bert-base-uncased"
+  fusion_dropout: 0.2
+  lora_vis: true
+  lora_txt: true
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+name: CNN_model_with_bert

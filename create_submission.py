@@ -47,7 +47,7 @@ def create_submission(cfg):
         )
     
     # Save the submission file
-    submission.to_csv(f"{cfg.root_dir}/submission_DINOV2_BERT_with_prompt_4_04_val_4_66_train_lora_Qformer.csv", index=False)
+    submission.to_csv(f"{cfg.root_dir}/submissission_EfficientNet_DISTILLBERT_LORA_3_04_val_3_50_train.csv", index=False)
     
     # Analyze prediction distribution by class
     view_thresholds = [0, 1000, 10000, 100000, 1000000, float('inf')]

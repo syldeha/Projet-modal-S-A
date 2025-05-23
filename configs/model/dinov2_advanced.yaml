@@ -1,4 +1,16 @@
 instance: 
-  _target_: models.dinov2_advanced.DinoV2Finetune_advanced
-  frozen: True
+  _target_: models.dinov2_advanced.DinoV2Finetune
+  coef_1: 1
+  coef_2: 0.5
+  dropout_p: 0.1
+  frozen: False
+  hidden_dim_1: 512
+  hidden_dim_2: 256
+  init_method: "xavier"
+  lora_alpha_text: 8
+  lora_dropout_text: 0.2
+  lora_r_text: 32
+  use_concatenation: False
+  vision_coef: 0.75
+  model_name: "efficientnet_b5"
 name: dinov2_advanced

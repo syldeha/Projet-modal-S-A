@@ -72,11 +72,10 @@ def make_prompt(entry):
         f"Channel: {entry['channel_real_name']}",
         f"Year: {entry['year']}",
     ]
-    desc_clean = clean_description(entry['description'])
-    if desc_clean:
-        fields.append(f"Description: {desc_clean}")
-    
-    prompt = "\n".join(fields)+"Predict the number of views of this video in terms of classes: low(0-1000), medium(1000-10000), high(10000-100000), viral(100000-1000000), top(1000000+)"
+    # desc_clean = clean_description(entry['description'])
+    # if desc_clean:
+    #     fields.append(f"Description: {desc_clean}")
+    prompt = "\n".join(fields)
     return prompt
 def process_youtube_csv(csv_path):
     """

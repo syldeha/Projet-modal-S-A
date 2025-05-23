@@ -13,7 +13,7 @@ from models.embedder import train_bert_tiny,MyLLM
 from models.trainFlanT5 import train_flant5
 from transformers import AutoTokenizer
 
-
+os.environ['HYDRA_FULL_ERROR'] = '1'
 
 # Calculer et afficher le nombre de paramètres du modèle
 def count_parameters(model):

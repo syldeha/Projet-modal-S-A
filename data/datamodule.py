@@ -13,6 +13,7 @@ class DataModule:
         batch_size,
         num_workers,
         metadata=["title"],
+        val_years=None
     ):
         self.dataset_path = dataset_path
         self.train_transform = train_transform  
@@ -26,7 +27,7 @@ class DataModule:
             self.dataset_path,
             self.train_transform,
             self.metadata,
-            val_year_min=2023
+            val_years=val_years
         )
 
     def train_dataloader(self):

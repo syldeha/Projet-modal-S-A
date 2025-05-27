@@ -118,7 +118,9 @@ def process_youtube_csv(csv_path):
         df['channel_real_name'] = df['channel'].map(channel_mapping)
     df['prompt_resume'] = df.apply(make_prompt, axis=1) #ajout de la colonne prompt_resume qui contient les informations liées à la publication de la vidéo
     # Retourner le DataFrame modifié
+
     return df
+
 def process_youtube_csv_test(df):
     """
     Fonction qui permet de modifier le fichier csv pour ajouter la colonne 'prompt_resume'
@@ -148,29 +150,37 @@ def feature_percentage_dict(df, feature_name):
     percentages = (counts / len(df) * 100).to_dict()
     return percentages
 
-def split_function(dataframe,val_year_min, year_column="year"):
-    df = dataframe.copy()
-    # Gère le cas val_year_min = None ou colonne année absente
-    if val_year_min is None or year_column not in df.columns:
-        logger_std.info("Pas de seuil d'année valide : tout dans le train, val=None.")
-        return df, None
+def print_label_distribution(df, label_column="labels", title=""):
+    """
+    Affiche la distribution (pourcentages) de la colonne 'labels' dans le DataFrame.
+    """
+    counts = df[label_column].value_counts(normalize=True) * 100
+    print(f"---- {title} ----")
+    for label, pct in counts.sort_index().items():
+        print(f"  {label}: {pct:.2f}%")
+    print("-----------------------")
 
+
+def split_function(df, val_years, year_column="year"):
+    """
+    Prend un dataframe et retourne (train_set, val_set) selon la liste des années de validation.
+    - val_years : int OU liste d'int
+    """
+    df = df.copy()
     df[year_column] = pd.to_numeric(df[year_column], errors='coerce')
-
-    # S'il n'y a aucune année >= val_year_min (pas de validation possible)
-    if not (df[year_column] >= val_year_min).any():
-        logger_std.info(f"Aucune donnée >= {val_year_min} dans '{year_column}' : tout dans le train, val=None.")
-        return df, None
-
-    val_set = df[df[year_column] >= val_year_min]
-    train_set = df[df[year_column] < val_year_min]
-
-    logger_std.info(f"train set (until {val_year_min-1}): {feature_percentage_dict(train_set, 'view_classes')}")
-    logger_std.info(f"val set (from {val_year_min}): {feature_percentage_dict(val_set, 'view_classes')}")
+    if isinstance(val_years, int): val_years = [val_years]
+    
+    mask_val = df[year_column].isin(val_years)
+    val_set = df[mask_val]
+    train_set = df[~mask_val]
+    
+    logger_std.info(f"Train set: {len(train_set)} rows / Val set (années {val_years}): {len(val_set)} rows")
+    print_label_distribution(train_set, "view_classes", "Train set")
+    print_label_distribution(val_set, "view_classes", "Val set")
     return train_set, val_set
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, dataset_path, split, transforms, metadata, val_year_min, train_or_val_or_test:str):
+    def __init__(self, dataset_path, split, transforms, metadata, val_years, train_or_val_or_test:str):
         """
         Args:
             dataset_path (str): path to the dataset
@@ -194,7 +204,7 @@ class Dataset(torch.utils.data.Dataset):
             info = process_youtube_csv_test(info)
 
         if train_or_val_or_test in ["train", "val"] and split != "test":
-            train_set, val_set = split_function(info, val_year_min)
+            train_set, val_set = split_function(info, val_years)
             if train_or_val_or_test == "train":
                 info = train_set
             elif train_or_val_or_test == "val":
@@ -222,7 +232,7 @@ class Dataset(torch.utils.data.Dataset):
         self.prompt_resume = info["prompt_resume"].values
 
     @classmethod
-    def create_train_val_datasets(cls, dataset_path, transforms, metadata, val_year_min):
+    def create_train_val_datasets(cls, dataset_path, transforms, metadata, val_years):
         """
         Factory method to create both train and val datasets at once.
         
@@ -240,23 +250,23 @@ class Dataset(torch.utils.data.Dataset):
         info = process_youtube_csv(f"{dataset_path}/train_val.csv")
         
         # Split data once
-        if val_year_min >= 2024:
+        if val_years ==None:
             train_info, val_info = info, None
             # Create train dataset
-            train_dataset = cls(dataset_path, "train_val", transforms, metadata, val_year_min, "train")
+            train_dataset = cls(dataset_path, "train_val", transforms, metadata, val_years, "train")
             # Manually set the data for train dataset
             train_dataset._set_data(train_info, metadata)
             return train_dataset, None
         else:
-            train_info, val_info = split_function(info, val_year_min)
+            train_info, val_info = split_function(info, val_years)
         
             # Create train dataset
-            train_dataset = cls(dataset_path, "train_val", transforms, metadata, val_year_min, "train")
+            train_dataset = cls(dataset_path, "train_val", transforms, metadata, val_years, "train")
             # Manually set the data for train dataset
             train_dataset._set_data(train_info, metadata)
             
             # Create val dataset
-            val_dataset = cls(dataset_path, "train_val", transforms, metadata, val_year_min, "val")
+            val_dataset = cls(dataset_path, "train_val", transforms, metadata, val_years, "val")
             # Manually set the data for val dataset
             val_dataset._set_data(val_info, metadata)
         

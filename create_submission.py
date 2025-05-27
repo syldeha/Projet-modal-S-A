@@ -47,7 +47,7 @@ def create_submission(cfg):
         )
     
     # Save the submission file
-    submission.to_csv(f"{cfg.root_dir}/submissission_EfficientNet_DISTILLBERT_LORA_3_04_val_3_50_train.csv", index=False)
+    submission.to_csv(f"{cfg.root_dir}/submissission_EfficientNetB4_distillbertLora_classification__3_49_val_4_23_train_2M_params_21epochs.csv", index=False)
     
     # Analyze prediction distribution by class
     view_thresholds = [0, 1000, 10000, 100000, 1000000, float('inf')]

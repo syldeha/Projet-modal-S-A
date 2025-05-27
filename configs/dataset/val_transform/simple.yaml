@@ -1,7 +1,7 @@
 _target_: torchvision.transforms.Compose
 transforms:
   - _target_: torchvision.transforms.Resize
-    size: [320, 320]
+    size: [224, 224] # à remerttre à 512 pour les models resnet
   - _target_: torchvision.transforms.ToTensor
   - _target_: torchvision.transforms.Normalize
     mean: [0.485, 0.456, 0.406] 

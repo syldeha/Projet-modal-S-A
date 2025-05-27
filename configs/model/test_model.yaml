@@ -1,0 +1,12 @@
+instance:
+  _target_: models.test_model.ImprovedMultiModalModel
+  vision_model: "mobilenetv4_hybrid_medium"
+  hidden_dim: 512
+  num_heads: 4
+  dropout: 0.2
+  lora_r: 4
+  lora_alpha: 8
+  # learning_rate: 1e-3
+  # epochs: 20
+  # experiment_name: improved_cross_modal
+name: test_model

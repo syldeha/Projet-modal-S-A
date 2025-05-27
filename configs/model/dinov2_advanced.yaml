@@ -1,16 +1,25 @@
 instance: 
-  _target_: models.dinov2_advanced.DinoV2Finetune
-  coef_1: 1
+  _target_: models.dinov2_advanced.DinoV2WithQFormer
+  coef_1: 0.5
   coef_2: 0.5
-  dropout_p: 0.1
-  frozen: False
-  hidden_dim_1: 512
+  dropout_p: 0.05
+  frozen: True
+  hidden_dim_1: 128
   hidden_dim_2: 256
   init_method: "xavier"
   lora_alpha_text: 8
-  lora_dropout_text: 0.2
-  lora_r_text: 32
+  lora_dropout_text: 0.1
+  lora_r_text: 16
   use_concatenation: False
   vision_coef: 0.75
-  model_name: "efficientnet_b5"
+  model_name: "mobilenetv4_hybrid_medium"
+  classification_model_name: "mobilenetv4_hybrid_medium"
+  vision_classification_model: True
+  num_heads_q_former: 4
+  num_layers_q_former: 2
+  num_queries_q_former: 8
+  q_former_coef : 0.75
+  q_former_insertion: False
+  coef_image_1: 0.5
+
 name: dinov2_advanced

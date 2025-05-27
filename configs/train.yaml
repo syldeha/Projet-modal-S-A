@@ -2,12 +2,12 @@ defaults:
     - _self_
     - dataset: default
     - optim: adamw
-    - model: dinov2_advanced
+    - model: test_model
     - loss_fn: msle
 
-epochs: 4
+epochs: 20
 log: True
-prefix: "efficientnet_advanced"
+prefix: ""
 experiment_name: ${prefix}${model.name}_${now:%Y-%m-%d_%H-%M-%S}
 
 # Enable this flag for second phase training to reduce "Solid Performers" sampling by half
@@ -26,8 +26,9 @@ datamodule:
   batch_size: ${dataset.batch_size}
   num_workers: ${dataset.num_workers}
   metadata: ${dataset.metadata}
+  val_years: ${dataset.val_years}
 
 data_dir: ${root_dir}/dataset/
 root_dir: ${hydra:runtime.cwd}
-checkpoint_path: ${root_dir}/checkpoints/${experiment_name}_efficientnet_advanced_with_distilbert.pt
-checkpoint_to_load: ${root_dir}/checkpoints/efficientnet_advanceddinov2_advanced_2025-05-23_11-17-59_efficientnet_advanced_with_distilbert_best.pt
+checkpoint_path: ${root_dir}/checkpoints/${experiment_name}_1.pt
+# checkpoint_to_load: ${root_dir}/checkpoints/efficientnet_advanceddinov2_advanced_2025-05-23_11-17-59_efficientnet_advanced_with_distilbert_best.pt

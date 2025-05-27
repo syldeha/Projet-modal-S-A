@@ -205,16 +205,16 @@ sweep_config = {
         # ---- Backbone -------
         'backbone_name':        {'values': ["mobilenetv3_large_100" , "efficientnet_b0", "efficientnet_b1"]},
         'pretrained':           {'values': [True]},    # ou [True, False]
-        'freeze_backbone':      {'values': [False, True]},
+        'freeze_backbone':      {'values': [True]},
         # ----- Tête -------
-        'hidden_dim_1':         {'values': [128, 256,64]},
-        'hidden_dim_2':         {'values': [64, 128, 256]},
-        'dropout_p':            {'values': [0.2, 0.1, 0.3]},
-        'activation':           {'values': ["relu", "gelu"]},
-        'init_method':          {'values': ["kaiming", "xavier"]},
+        'hidden_dim_1':         {'values': [128]},
+        'hidden_dim_2':         {'values': [128]},
+        'dropout_p':            {'values': [0.1]},
+        'activation':           {'values': ["gelu"]},
+        'init_method':          {'values': ["xavier"]},
         # ---- Optimiz/Train -----
-        'learning_rate':        {'values': [1e-4, 1e-3, 1e-2]},
-        'epochs':               {'values': [5]},  # à adapter !
+        'learning_rate':        {'values': [1e-4, 1e-3, 1e-5]},
+        'epochs':               {'values': [10]},  # à adapter !
         'experiment_name':      {'values': ["flexible_classification"]},
         # ----- Data -----
         'num_classes':          {'values': [5]},  # à adapter à ton problème

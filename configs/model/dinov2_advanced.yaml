@@ -1,25 +1,32 @@
 instance: 
-  _target_: models.dinov2_advanced.DinoV2WithQFormer
-  coef_1: 0.5
-  coef_2: 0.5
-  dropout_p: 0.05
-  frozen: True
-  hidden_dim_1: 128
+  _target_: models.dinov2_advanced.MultiModalModel
+  # coef_1: 0.75
+  # coef_2: 1
+  dropout_p: 0.2
+  # frozen: True
+  hidden_dim_1: 256
   hidden_dim_2: 256
   init_method: "xavier"
-  lora_alpha_text: 8
+  lora_alpha_text: 4
   lora_dropout_text: 0.1
   lora_r_text: 16
-  use_concatenation: False
-  vision_coef: 0.75
-  model_name: "mobilenetv4_hybrid_medium"
-  classification_model_name: "mobilenetv4_hybrid_medium"
-  vision_classification_model: True
-  num_heads_q_former: 4
-  num_layers_q_former: 2
-  num_queries_q_former: 8
-  q_former_coef : 0.75
-  q_former_insertion: False
-  coef_image_1: 0.5
+  lora_r_vision: 8
+  lora_alpha_vision: 8
+  lora_dropout_vision: 0.1
+  fusion_dim: 512
+  num_channels: 47
+  dinov_vision_coef: 0.75
+  # use_concatenation: True
+  use_vision_classification_model: False
+  # vision_coef: 0.5
+  # model_name: "mobilenetv4_hybrid_medium"
+  # classification_model_name: "efficientnet_b1"
+  # vision_classification_model: True
+  # num_heads_q_former: 4
+  # num_layers_q_former: 2
+  # num_queries_q_former: 8
+  # q_former_coef : 0.5
+  # q_former_insertion: False
+  # coef_image_1: 0.5
 
 name: dinov2_advanced

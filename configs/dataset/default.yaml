@@ -2,7 +2,8 @@ defaults:
     - val_transform: simple
     - train_transform: simple
 
-batch_size: 64
+batch_size: 8
 num_workers: 4
 metadata: ["title"]
-val_years:  [2023,2021]
+custom_val_split: {2023: 400, 2022: 200, 2021: 200, 2020: 200, 2019: 200, 2018: 200, 2017:200}
+seed: 42

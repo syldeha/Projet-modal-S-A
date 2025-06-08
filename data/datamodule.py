@@ -1,7 +1,7 @@
 from torch.utils.data import DataLoader
 import torch
 from data.dataset import Dataset
-
+import numpy as np
 
 
 class DataModule:
@@ -13,7 +13,9 @@ class DataModule:
         batch_size,
         num_workers,
         metadata=["title"],
-        val_years=None
+        val_years=None,
+        custom_val_split={2023: 400, 2022: 200, 2021: 200, 2020: 200, 2019: 200, 2018: 200, 2017:200},
+        seed=42
     ):
         self.dataset_path = dataset_path
         self.train_transform = train_transform  
@@ -21,13 +23,15 @@ class DataModule:
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.metadata = metadata
-        
+        self.custom_val_split = custom_val_split
+        self.seed = seed
         # Create train and val datasets in a single operation using the factory method
         self.train, self.val = Dataset.create_train_val_datasets(
             self.dataset_path,
             self.train_transform,
             self.metadata,
-            val_years=val_years
+            custom_val_split=self.custom_val_split,
+            seed=self.seed
         )
 
     def train_dataloader(self):
@@ -57,8 +61,9 @@ class DataModule:
             "test",
             transforms=self.test_transform,
             metadata=self.metadata,
-            split_ratio=1,
-            train_or_val_or_test="test"
+            custom_val_split=None,
+            train_or_val_or_test="test",
+            seed=100
         )
         return DataLoader(
             dataset,
